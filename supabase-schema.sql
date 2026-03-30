@@ -39,8 +39,8 @@ CREATE TABLE IF NOT EXISTS public.notice_participants (
   UNIQUE(notice_id, user_id)
 );
 
--- 4. 유저 프로필 테이블
-CREATE TABLE IF NOT EXISTS public.user_profiles (
+-- 4. 골프 유저 프로필 테이블
+CREATE TABLE IF NOT EXISTS public.golf_user_profiles (
   user_id       uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   display_name  text,
   theme         text DEFAULT 'light' CHECK (theme IN ('light', 'dark')),
@@ -53,13 +53,13 @@ CREATE INDEX IF NOT EXISTS idx_golf_records_user_id ON public.golf_records(user_
 CREATE INDEX IF NOT EXISTS idx_golf_records_play_date ON public.golf_records(user_id, play_date DESC);
 CREATE INDEX IF NOT EXISTS idx_notices_play_date ON public.notices(play_date DESC);
 CREATE INDEX IF NOT EXISTS idx_notice_participants_notice ON public.notice_participants(notice_id);
-CREATE INDEX IF NOT EXISTS idx_user_profiles_slack ON public.user_profiles(slack_user_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_slack ON public.golf_user_profiles(slack_user_id);
 
 -- 6. RLS 활성화
 ALTER TABLE public.golf_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notice_participants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.golf_user_profiles ENABLE ROW LEVEL SECURITY;
 
 -- 7. RLS 정책 - golf_records (본인 기록만 CRUD)
 CREATE POLICY "Users can view own golf records" ON public.golf_records
@@ -89,12 +89,15 @@ CREATE POLICY "Users can join notices" ON public.notice_participants
 CREATE POLICY "Users can leave notices" ON public.notice_participants
   FOR DELETE USING (auth.uid() = user_id);
 
--- 10. RLS 정책 - user_profiles
-CREATE POLICY "Users can view own profile" ON public.user_profiles
+-- 10. RLS 정책 - user_profiles (이미 존재할 수 있으므로 DROP 후 재생성)
+DROP POLICY IF EXISTS "Users can view own profile" ON public.golf_user_profiles;
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.golf_user_profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.golf_user_profiles;
+CREATE POLICY "Users can view own profile" ON public.golf_user_profiles
   FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own profile" ON public.user_profiles
+CREATE POLICY "Users can insert own profile" ON public.golf_user_profiles
   FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own profile" ON public.user_profiles
+CREATE POLICY "Users can update own profile" ON public.golf_user_profiles
   FOR UPDATE USING (auth.uid() = user_id);
 
 -- 11. Realtime 활성화

@@ -1,19 +1,19 @@
 import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
-import { useGolfRecords } from '@/hooks/useGolfRecords'
+import { useGolfRounds } from '@/hooks/useGolfRounds'
 import { useNotices } from '@/hooks/useNotices'
 import { Header } from '@/components/layout/Header'
 import { AuthForm } from '@/components/auth/AuthForm'
-import { GolfRecordList } from '@/components/golf/GolfRecordList'
+import { ScorecardList } from '@/components/golf/ScorecardList'
 import { NoticeList } from '@/components/notice/NoticeList'
 
 export default function App() {
   const { user, loading: authLoading, signUp, signIn, signInWithGoogle, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme(user?.id ?? null)
-  const { records, loading: recordsLoading, addRecord, updateRecord, deleteRecord } = useGolfRecords(user?.id ?? null)
+  const { rounds, loading: roundsLoading, addRound, deleteRound } = useGolfRounds(user?.id ?? null)
   const { notices, loading: noticesLoading, addNotice, updateNotice, deleteNotice, joinNotice, leaveNotice } = useNotices(user?.id ?? null)
-  const [activeTab, setActiveTab] = useState('records')
+  const [activeTab, setActiveTab] = useState('scorecards')
 
   if (authLoading) {
     return (
@@ -47,13 +47,12 @@ export default function App() {
         onTabChange={setActiveTab}
       />
       <main className="mx-auto max-w-4xl px-4 py-6">
-        {activeTab === 'records' && (
-          <GolfRecordList
-            records={records}
-            loading={recordsLoading}
-            onAdd={addRecord}
-            onUpdate={updateRecord}
-            onDelete={deleteRecord}
+        {activeTab === 'scorecards' && (
+          <ScorecardList
+            rounds={rounds}
+            loading={roundsLoading}
+            onAdd={addRound}
+            onDelete={deleteRound}
           />
         )}
         {activeTab === 'notices' && (

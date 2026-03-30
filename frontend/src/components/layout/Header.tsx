@@ -14,7 +14,7 @@ interface Props {
 
 export function Header({ user, theme, onToggleTheme, onSignOut, activeTab, onTabChange }: Props) {
   const tabs = [
-    { id: 'records', label: '골프 기록' },
+    { id: 'scorecards', label: '스코어카드' },
     { id: 'notices', label: '일정 공지' },
   ]
 
@@ -22,7 +22,7 @@ export function Header({ user, theme, onToggleTheme, onSignOut, activeTab, onTab
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-sm">
       <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-6">
-          <h1 className="text-xl font-bold text-primary">⛳ 골프 기록</h1>
+          <h1 className="text-xl font-bold text-primary">⛳ 피터파의 샷점검</h1>
           {user && (
             <nav className="flex gap-1">
               {tabs.map((tab) => (

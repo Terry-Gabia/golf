@@ -38,7 +38,7 @@ export function AuthForm({ onSignIn, onSignUp, onSignInWithGoogle }: Props) {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <h1 className="text-4xl mb-2">⛳</h1>
-          <h2 className="text-2xl font-bold">골프 기록</h2>
+          <h2 className="text-2xl font-bold">피터파의 샷점검</h2>
           <p className="mt-1 text-sm text-muted-foreground">스코어를 기록하고 관리하세요</p>
         </div>
 

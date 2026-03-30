@@ -20,7 +20,7 @@ export function useTheme(userId: string | null) {
   useEffect(() => {
     if (!userId) return
     supabase
-      .from('user_profiles')
+      .from('golf_user_profiles')
       .select('theme')
       .eq('user_id', userId)
       .single()
@@ -38,7 +38,7 @@ export function useTheme(userId: string | null) {
       localStorage.setItem('theme', newTheme)
       if (userId) {
         await supabase
-          .from('user_profiles')
+          .from('golf_user_profiles')
           .upsert({ user_id: userId, theme: newTheme }, { onConflict: 'user_id' })
       }
     },

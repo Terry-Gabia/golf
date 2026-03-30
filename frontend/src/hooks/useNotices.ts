@@ -36,7 +36,7 @@ export function useNotices(userId: string | null) {
       .in('notice_id', noticeIds)
 
     const { data: profiles } = await supabase
-      .from('user_profiles')
+      .from('golf_user_profiles')
       .select('user_id, display_name')
 
     const profileMap = new Map(profiles?.map((p) => [p.user_id, p.display_name]) ?? [])
