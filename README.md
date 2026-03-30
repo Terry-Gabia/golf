@@ -30,3 +30,11 @@ React + TypeScript + Supabase(prisma 이용시 query는 ORM이 아닌 native sql
 일반 텍스트 입력	자동으로 추가 삭제 
 /glist	최근 골프 기록 리스트
 /gsave [번호] [-1,0,1,2,3,4]	기록 이미 기록되어 있다면 업데이트
+
+
+배포 (Railway)
+* 이 레포는 루트 `Dockerfile` 기준으로 Railway에 바로 배포 가능
+* Railway Variables에는 `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`만 넣으면 됨
+* GitHub 저장소 연결 후 Deploy 하면 `frontend`를 빌드해서 정적 서버로 공개됨
+* 배포 후 발급된 Railway 도메인을 Supabase Auth의 `Site URL`과 `Redirect URLs`에 추가해야 Google 로그인 정상 동작
+* 헬스체크 경로는 `/health`
