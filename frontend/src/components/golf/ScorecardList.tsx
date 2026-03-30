@@ -6,10 +6,21 @@ import type { GolfRound, PlayType } from '@/types'
 import { PLAY_TYPES } from '@/types'
 
 interface Props {
+  currentUserId: string
   rounds: GolfRound[]
   loading: boolean
   onAdd: (data: {
     play_type: PlayType
+    visibility: 'public' | 'private'
+    cc_name: string
+    play_date: string
+    holes: number
+    pars: number[]
+    players: { player_name: string; scores: number[]; total: number }[]
+  }) => Promise<void>
+  onUpdate: (id: string, data: {
+    play_type: PlayType
+    visibility: 'public' | 'private'
     cc_name: string
     play_date: string
     holes: number
@@ -19,8 +30,9 @@ interface Props {
   onDelete: (id: string) => Promise<void>
 }
 
-export function ScorecardList({ rounds, loading, onAdd, onDelete }: Props) {
+export function ScorecardList({ currentUserId, rounds, loading, onAdd, onUpdate, onDelete }: Props) {
   const [showForm, setShowForm] = useState(false)
+  const [editRound, setEditRound] = useState<GolfRound | null>(null)
   const [filter, setFilter] = useState<PlayType | '전체'>('전체')
 
   const filtered = filter === '전체' ? rounds : rounds.filter((r) => r.play_type === filter)
@@ -66,12 +78,26 @@ export function ScorecardList({ rounds, loading, onAdd, onDelete }: Props) {
       ) : (
         <div className="space-y-4">
           {filtered.map((round) => (
-            <Scorecard key={round.id} round={round} onDelete={onDelete} />
+            <Scorecard
+              key={round.id}
+              round={round}
+              currentUserId={currentUserId}
+              onEdit={(targetRound) => setEditRound(targetRound)}
+              onDelete={onDelete}
+            />
           ))}
         </div>
       )}
 
       {showForm && <ScorecardForm onSubmit={onAdd} onClose={() => setShowForm(false)} />}
+
+      {editRound && (
+        <ScorecardForm
+          round={editRound}
+          onSubmit={(data) => onUpdate(editRound.id, data)}
+          onClose={() => setEditRound(null)}
+        />
+      )}
     </div>
   )
 }

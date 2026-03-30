@@ -1,5 +1,6 @@
 export type PlayType = '필드' | '파3' | '스크린'
 export type Theme = 'light' | 'dark'
+export type RoundVisibility = 'public' | 'private'
 
 export interface GolfRecord {
   id: string
@@ -17,6 +18,7 @@ export interface GolfRound {
   id: string
   user_id: string
   play_type: PlayType
+  visibility: RoundVisibility
   cc_name: string
   play_date: string
   holes: number
@@ -69,6 +71,11 @@ export interface UserProfile {
 }
 
 export const PLAY_TYPES: PlayType[] = ['필드', '파3', '스크린']
+export const ROUND_VISIBILITIES: RoundVisibility[] = ['private', 'public']
+export const ROUND_VISIBILITY_LABELS: Record<RoundVisibility, string> = {
+  private: '비공개',
+  public: '공개',
+}
 
 export const PLAY_TYPE_COLORS: Record<PlayType, { bg: string; text: string }> = {
   '필드': { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400' },

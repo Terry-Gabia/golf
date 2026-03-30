@@ -1,9 +1,11 @@
-import { Trash2 } from 'lucide-react'
-import { PLAY_TYPE_COLORS, PLAYER_ROW_COLORS } from '@/types'
+import { Pencil, Trash2 } from 'lucide-react'
+import { PLAY_TYPE_COLORS, PLAYER_ROW_COLORS, ROUND_VISIBILITY_LABELS } from '@/types'
 import type { GolfRound } from '@/types'
 
 interface Props {
   round: GolfRound
+  currentUserId: string
+  onEdit: (round: GolfRound) => void
   onDelete: (id: string) => void
 }
 
@@ -31,11 +33,13 @@ function totalClass(total: number) {
   return 'font-bold'
 }
 
-export function Scorecard({ round, onDelete }: Props) {
+export function Scorecard({ round, currentUserId, onEdit, onDelete }: Props) {
   const players = round.players ?? []
   const pars = round.pars ?? []
   const parTotal = pars.reduce((a, b) => a + b, 0)
   const colors = PLAY_TYPE_COLORS[round.play_type]
+  const isOwner = round.user_id === currentUserId
+  const canEdit = isOwner || round.visibility === 'public'
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -45,15 +49,30 @@ export function Scorecard({ round, onDelete }: Props) {
           <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${colors.bg} ${colors.text}`}>
             {round.play_type}
           </span>
+          <span className="inline-flex rounded-md bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            {ROUND_VISIBILITY_LABELS[round.visibility]}
+          </span>
           <span className="font-semibold">{round.cc_name}</span>
           <span className="text-sm text-muted-foreground">— {formatDate(round.play_date)}</span>
         </div>
-        <button
-          onClick={() => onDelete(round.id)}
-          className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {canEdit && (
+            <button
+              onClick={() => onEdit(round)}
+              className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          )}
+          {isOwner && (
+            <button
+              onClick={() => onDelete(round.id)}
+              className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 스코어카드 테이블 */}

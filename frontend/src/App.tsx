@@ -11,7 +11,7 @@ import { NoticeList } from '@/components/notice/NoticeList'
 export default function App() {
   const { user, loading: authLoading, signUp, signIn, signInWithGoogle, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme(user?.id ?? null)
-  const { rounds, loading: roundsLoading, addRound, deleteRound } = useGolfRounds(user?.id ?? null)
+  const { rounds, loading: roundsLoading, addRound, updateRound, deleteRound } = useGolfRounds(user?.id ?? null)
   const { notices, loading: noticesLoading, addNotice, updateNotice, deleteNotice, joinNotice, leaveNotice } = useNotices(user?.id ?? null)
   const [activeTab, setActiveTab] = useState('scorecards')
 
@@ -49,9 +49,11 @@ export default function App() {
       <main className="mx-auto max-w-4xl px-4 py-6">
         {activeTab === 'scorecards' && (
           <ScorecardList
+            currentUserId={user.id}
             rounds={rounds}
             loading={roundsLoading}
             onAdd={addRound}
+            onUpdate={updateRound}
             onDelete={deleteRound}
           />
         )}

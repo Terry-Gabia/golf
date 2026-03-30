@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, Plus, Trash2 } from 'lucide-react'
-import { PLAY_TYPES } from '@/types'
-import type { PlayType } from '@/types'
+import { PLAY_TYPES, ROUND_VISIBILITY_LABELS } from '@/types'
+import type { GolfRound, PlayType, RoundVisibility } from '@/types'
 
 interface PlayerInput {
   name: string
@@ -9,8 +9,10 @@ interface PlayerInput {
 }
 
 interface Props {
+  round?: GolfRound | null
   onSubmit: (data: {
     play_type: PlayType
+    visibility: RoundVisibility
     cc_name: string
     play_date: string
     holes: number
@@ -20,15 +22,27 @@ interface Props {
   onClose: () => void
 }
 
-export function ScorecardForm({ onSubmit, onClose }: Props) {
-  const [playType, setPlayType] = useState<PlayType>('파3')
-  const [ccName, setCcName] = useState('')
-  const [playDate, setPlayDate] = useState(new Date().toISOString().split('T')[0])
-  const [holes, setHoles] = useState(9)
-  const [pars, setPars] = useState<string[]>(Array(9).fill('3'))
-  const [players, setPlayers] = useState<PlayerInput[]>([
-    { name: '', scores: Array(9).fill('') },
-  ])
+function buildInitialPlayers(round?: GolfRound | null): PlayerInput[] {
+  if (!round?.players?.length) {
+    return [{ name: '', scores: Array(round?.holes ?? 9).fill('') }]
+  }
+
+  return round.players.map((player) => ({
+    name: player.player_name,
+    scores: player.scores.map((score) => String(score)),
+  }))
+}
+
+export function ScorecardForm({ round, onSubmit, onClose }: Props) {
+  const [playType, setPlayType] = useState<PlayType>(round?.play_type ?? '파3')
+  const [visibility, setVisibility] = useState<RoundVisibility>(round?.visibility ?? 'private')
+  const [ccName, setCcName] = useState(round?.cc_name ?? '')
+  const [playDate, setPlayDate] = useState(round?.play_date ?? new Date().toISOString().split('T')[0])
+  const [holes, setHoles] = useState(round?.holes ?? 9)
+  const [pars, setPars] = useState<string[]>(
+    (round?.pars ?? Array(round?.holes ?? 9).fill(3)).map((par) => String(par))
+  )
+  const [players, setPlayers] = useState<PlayerInput[]>(buildInitialPlayers(round))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -88,6 +102,7 @@ export function ScorecardForm({ onSubmit, onClose }: Props) {
     try {
       await onSubmit({
         play_type: playType,
+        visibility,
         cc_name: ccName.trim(),
         play_date: playDate,
         holes,
@@ -113,7 +128,7 @@ export function ScorecardForm({ onSubmit, onClose }: Props) {
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-8" onClick={onClose}>
       <div className="w-full max-w-3xl rounded-xl bg-card border border-border p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">새 스코어카드</h3>
+          <h3 className="text-lg font-semibold">{round ? '스코어카드 수정' : '새 스코어카드'}</h3>
           <button onClick={onClose} className="rounded-lg p-1 hover:bg-muted"><X className="h-5 w-5" /></button>
         </div>
 
@@ -161,6 +176,31 @@ export function ScorecardForm({ onSubmit, onClose }: Props) {
                 <option value={9}>9홀</option>
                 <option value={18}>18홀</option>
               </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium">공개 설정</label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(['private', 'public'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setVisibility(option)}
+                  className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                    visibility === option
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-input bg-background text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  <span className="block font-medium">{ROUND_VISIBILITY_LABELS[option]}</span>
+                  <span className="mt-1 block text-xs opacity-80">
+                    {option === 'public'
+                      ? '로그인한 누구나 보고 수정할 수 있습니다.'
+                      : '작성자 본인만 보고 수정할 수 있습니다.'}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -257,7 +297,7 @@ export function ScorecardForm({ onSubmit, onClose }: Props) {
             disabled={loading}
             className="w-full rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
-            {loading ? '저장 중...' : '저장'}
+            {loading ? '저장 중...' : round ? '수정' : '저장'}
           </button>
         </form>
       </div>
