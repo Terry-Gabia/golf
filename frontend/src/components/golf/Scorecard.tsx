@@ -1,6 +1,6 @@
-import { Globe2, Lock, Pencil, Sparkles, Trash2, Users2 } from 'lucide-react'
+import { Globe2, Lock, Pencil, Sparkles, Trash2, Trophy, Users2 } from 'lucide-react'
 import { PLAY_TYPE_COLORS, PLAYER_ROW_COLORS, ROUND_VISIBILITY_LABELS } from '@/types'
-import type { GolfRound } from '@/types'
+import type { GolfRound, GolfRoundPlayer } from '@/types'
 
 interface Props {
   round: GolfRound
@@ -8,6 +8,8 @@ interface Props {
   onEdit: (round: GolfRound) => void
   onDelete: (id: string) => void
 }
+
+type RankedPlayer = GolfRoundPlayer & { originalIndex: number; rank: number }
 
 const DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -31,6 +33,17 @@ function totalClass(total: number) {
   if (total <= 0) return 'text-blue-600 dark:text-blue-400 font-bold'
   if (total >= 15) return 'text-red-600 dark:text-red-400 font-bold'
   return 'font-bold'
+}
+
+function rankLabel(rank: number) {
+  return `${rank}위`
+}
+
+function trophyTone(rank: number) {
+  if (rank === 1) return 'text-amber-500 dark:text-amber-300'
+  if (rank === 2) return 'text-slate-500 dark:text-slate-300'
+  if (rank === 3) return 'text-orange-500 dark:text-orange-300'
+  return 'text-muted-foreground'
 }
 
 const PUBLIC_ROW_STYLES = [
@@ -58,6 +71,18 @@ const PUBLIC_ROW_STYLES = [
 
 export function Scorecard({ round, currentUserId, onEdit, onDelete }: Props) {
   const players = round.players ?? []
+  const sortedPlayers: RankedPlayer[] = [...players]
+    .map((player, index) => ({ ...player, originalIndex: index }))
+    .sort((a, b) => {
+      if (a.total !== b.total) return a.total - b.total
+      return a.originalIndex - b.originalIndex
+    })
+    .reduce<RankedPlayer[]>((acc, player, index) => {
+      const prev = acc[acc.length - 1]
+      const rank = prev && prev.total === player.total ? prev.rank : index + 1
+      acc.push({ ...player, rank })
+      return acc
+    }, [])
   const pars = round.pars ?? []
   const parTotal = pars.reduce((a, b) => a + b, 0)
   const colors = PLAY_TYPE_COLORS[round.play_type]
@@ -181,14 +206,14 @@ export function Scorecard({ round, currentUserId, onEdit, onDelete }: Props) {
             </tr>
           </thead>
           <tbody>
-            {players.length === 0 ? (
+            {sortedPlayers.length === 0 ? (
               <tr>
                 <td colSpan={pars.length + 2} className="px-3 py-4 text-center text-muted-foreground">
                   참가자 없음
                 </td>
               </tr>
             ) : (
-              players.map((player, idx) => {
+              sortedPlayers.map((player, idx) => {
                 const rowColor = PLAYER_ROW_COLORS[idx % PLAYER_ROW_COLORS.length]
                 const publicRowStyle = PUBLIC_ROW_STYLES[idx % PUBLIC_ROW_STYLES.length]
                 const rowTone = isPublic ? publicRowStyle.row : rowColor
@@ -200,7 +225,17 @@ export function Scorecard({ round, currentUserId, onEdit, onDelete }: Props) {
                         ? `${nameTone} backdrop-blur`
                         : nameTone
                     }`}>
-                      {player.player_name}
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          player.rank <= 3
+                            ? 'bg-white/70 text-foreground ring-1 ring-black/5 dark:bg-white/10 dark:ring-white/10'
+                            : 'bg-black/8 text-muted-foreground ring-1 ring-black/5 dark:bg-white/6 dark:ring-white/8'
+                        }`}>
+                          <Trophy className={`h-3.5 w-3.5 ${trophyTone(player.rank)}`} />
+                          {rankLabel(player.rank)}
+                        </span>
+                        <span>{player.player_name}</span>
+                      </div>
                     </td>
                     {(player.scores ?? []).map((s, i) => {
                       const { text, cls } = scoreCell(s)
