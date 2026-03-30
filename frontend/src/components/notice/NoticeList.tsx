@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { NoticeCard } from './NoticeCard'
 import { NoticeForm } from './NoticeForm'
+import { JoinNoticeDialog } from './JoinNoticeDialog'
 import type { Notice, PlayType } from '@/types'
 
 interface Props {
@@ -27,13 +28,14 @@ interface Props {
     description: string | null
   }>) => Promise<void>
   onDelete: (id: string) => Promise<void>
-  onJoin: (id: string) => Promise<void>
+  onJoin: (id: string, participantName: string) => Promise<void>
   onLeave: (id: string) => Promise<void>
 }
 
 export function NoticeList({ notices, loading, currentUserId, onAdd, onUpdate, onDelete, onJoin, onLeave }: Props) {
   const [showForm, setShowForm] = useState(false)
   const [editNotice, setEditNotice] = useState<Notice | null>(null)
+  const [joinNotice, setJoinNotice] = useState<Notice | null>(null)
 
   const today = new Date().toISOString().split('T')[0]
   const upcoming = notices.filter((n) => n.play_date >= today)
@@ -70,7 +72,7 @@ export function NoticeList({ notices, loading, currentUserId, onAdd, onUpdate, o
                   currentUserId={currentUserId}
                   onEdit={(n) => setEditNotice(n)}
                   onDelete={onDelete}
-                  onJoin={onJoin}
+                  onJoin={() => setJoinNotice(notice)}
                   onLeave={onLeave}
                 />
               ))}
@@ -86,7 +88,7 @@ export function NoticeList({ notices, loading, currentUserId, onAdd, onUpdate, o
                   currentUserId={currentUserId}
                   onEdit={(n) => setEditNotice(n)}
                   onDelete={onDelete}
-                  onJoin={onJoin}
+                  onJoin={() => setJoinNotice(notice)}
                   onLeave={onLeave}
                 />
               ))}
@@ -106,6 +108,14 @@ export function NoticeList({ notices, loading, currentUserId, onAdd, onUpdate, o
             await onUpdate(editNotice.id, data)
           }}
           onClose={() => setEditNotice(null)}
+        />
+      )}
+
+      {joinNotice && (
+        <JoinNoticeDialog
+          noticeTitle={joinNotice.title}
+          onSubmit={(participantName) => onJoin(joinNotice.id, participantName)}
+          onClose={() => setJoinNotice(null)}
         />
       )}
     </div>

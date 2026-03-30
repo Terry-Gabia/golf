@@ -7,7 +7,7 @@ interface Props {
   currentUserId: string
   onEdit: (notice: Notice) => void
   onDelete: (id: string) => void
-  onJoin: (id: string) => void
+  onJoin: () => void
   onLeave: (id: string) => void
 }
 
@@ -64,7 +64,7 @@ export function NoticeCard({ notice, currentUserId, onEdit, onDelete, onJoin, on
                   key={p.id}
                   className="inline-flex rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
                 >
-                  {p.display_name || p.email || '참가자'}
+                  {p.participant_name || p.display_name || p.email || '참가자'}
                 </span>
               ))}
             </div>
@@ -91,7 +91,7 @@ export function NoticeCard({ notice, currentUserId, onEdit, onDelete, onJoin, on
 
           {!isPast && (
             <button
-              onClick={() => (isJoined ? onLeave(notice.id) : onJoin(notice.id))}
+              onClick={() => (isJoined ? onLeave(notice.id) : onJoin())}
               disabled={!isJoined && isFull}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 isJoined

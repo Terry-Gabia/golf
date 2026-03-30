@@ -104,11 +104,15 @@ export function useNotices(userId: string | null) {
   )
 
   const joinNotice = useCallback(
-    async (noticeId: string) => {
+    async (noticeId: string, participantName: string) => {
       if (!userId) return
+      const trimmedName = participantName.trim()
+      if (!trimmedName) {
+        throw new Error('참가 이름을 입력해주세요.')
+      }
       const { error } = await supabase
         .from('notice_participants')
-        .insert({ notice_id: noticeId, user_id: userId })
+        .insert({ notice_id: noticeId, user_id: userId, participant_name: trimmedName })
       if (error) throw error
       await fetchNotices()
     },

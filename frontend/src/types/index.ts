@@ -59,6 +59,7 @@ export interface NoticeParticipant {
   notice_id: string
   user_id: string
   created_at: string
+  participant_name?: string | null
   display_name?: string | null
   email?: string
 }

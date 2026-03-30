@@ -35,9 +35,13 @@ CREATE TABLE IF NOT EXISTS public.notice_participants (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   notice_id   uuid NOT NULL REFERENCES public.notices(id) ON DELETE CASCADE,
   user_id     uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  participant_name text,
   created_at  timestamptz NOT NULL DEFAULT now(),
   UNIQUE(notice_id, user_id)
 );
+
+ALTER TABLE public.notice_participants
+  ADD COLUMN IF NOT EXISTS participant_name text;
 
 -- 4. 골프 유저 프로필 테이블
 CREATE TABLE IF NOT EXISTS public.golf_user_profiles (
