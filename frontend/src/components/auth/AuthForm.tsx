@@ -113,7 +113,7 @@ export function AuthForm({ onSignIn, onSignUp, onSignInWithGoogle }: Props) {
           </button>
 
           <a
-            href={`${import.meta.env.VITE_BACKEND_URL || ''}/api/auth/naver`}
+            href="/api/auth/naver"
             className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90"
             style={{ backgroundColor: '#03C75A' }}
           >
