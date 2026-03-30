@@ -112,12 +112,16 @@ export function AuthForm({ onSignIn, onSignUp, onSignInWithGoogle }: Props) {
             Google로 로그인
           </button>
 
-          <button
-            disabled
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-input bg-background py-2.5 text-sm font-medium opacity-50 cursor-not-allowed"
+          <a
+            href={`${import.meta.env.VITE_BACKEND_URL || ''}/api/auth/naver`}
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90"
+            style={{ backgroundColor: '#03C75A' }}
           >
-            🏢 하이웍스 SSO (준비 중)
-          </button>
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="white">
+              <path d="M16.273 12.845L7.376 0H0v24h7.726V11.156L16.624 24H24V0h-7.727z"/>
+            </svg>
+            네이버로 로그인
+          </a>
         </div>
       </div>
     </div>

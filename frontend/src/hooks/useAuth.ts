@@ -9,6 +9,25 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // 네이버 로그인 콜백 처리 (magic link token)
+    const params = new URLSearchParams(window.location.search)
+    const tokenHash = params.get('token_hash')
+    const type = params.get('type')
+    if (tokenHash && type === 'magiclink') {
+      supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'magiclink' }).then(({ error }) => {
+        // URL에서 파라미터 제거
+        window.history.replaceState({}, '', window.location.pathname)
+        if (error) console.error('Naver auth verify error:', error)
+      })
+    }
+
+    // 에러 파라미터 처리
+    const authError = params.get('error')
+    if (authError) {
+      console.error('Auth error:', authError)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
