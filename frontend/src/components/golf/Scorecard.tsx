@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from 'lucide-react'
+import { Globe2, Lock, Pencil, Sparkles, Trash2, Users2 } from 'lucide-react'
 import { PLAY_TYPE_COLORS, PLAYER_ROW_COLORS, ROUND_VISIBILITY_LABELS } from '@/types'
 import type { GolfRound } from '@/types'
 
@@ -33,63 +33,147 @@ function totalClass(total: number) {
   return 'font-bold'
 }
 
+const PUBLIC_ROW_STYLES = [
+  {
+    row: 'bg-sky-50/80 dark:bg-sky-500/7',
+    name: 'bg-sky-100 text-sky-950 dark:bg-sky-500/16 dark:text-sky-100',
+  },
+  {
+    row: 'bg-amber-50/85 dark:bg-amber-500/8',
+    name: 'bg-amber-100 text-amber-950 dark:bg-amber-500/16 dark:text-amber-100',
+  },
+  {
+    row: 'bg-emerald-50/80 dark:bg-emerald-500/7',
+    name: 'bg-emerald-100 text-emerald-950 dark:bg-emerald-500/16 dark:text-emerald-100',
+  },
+  {
+    row: 'bg-rose-50/80 dark:bg-rose-500/7',
+    name: 'bg-rose-100 text-rose-950 dark:bg-rose-500/16 dark:text-rose-100',
+  },
+  {
+    row: 'bg-violet-50/80 dark:bg-violet-500/7',
+    name: 'bg-violet-100 text-violet-950 dark:bg-violet-500/16 dark:text-violet-100',
+  },
+]
+
 export function Scorecard({ round, currentUserId, onEdit, onDelete }: Props) {
   const players = round.players ?? []
   const pars = round.pars ?? []
   const parTotal = pars.reduce((a, b) => a + b, 0)
   const colors = PLAY_TYPE_COLORS[round.play_type]
+  const isPublic = round.visibility === 'public'
   const isOwner = round.user_id === currentUserId
-  const canEdit = isOwner || round.visibility === 'public'
+  const canEdit = isOwner || isPublic
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className={`relative overflow-hidden rounded-2xl border ${
+      isPublic
+        ? 'border-sky-400/30 bg-gradient-to-br from-sky-500/8 via-card to-emerald-500/10 shadow-[0_24px_60px_-28px_rgba(14,165,233,0.45)]'
+        : 'border-border bg-card'
+    }`}>
+      {isPublic && (
+        <>
+          <div className="pointer-events-none absolute -right-12 top-0 h-28 w-28 rounded-full bg-sky-400/18 blur-3xl" />
+          <div className="pointer-events-none absolute left-1/3 top-2 h-16 w-16 rounded-full bg-emerald-400/14 blur-2xl" />
+        </>
+      )}
+
       {/* 헤더 */}
-      <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${colors.bg} ${colors.text}`}>
-            {round.play_type}
-          </span>
-          <span className="inline-flex rounded-md bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
-            {ROUND_VISIBILITY_LABELS[round.visibility]}
-          </span>
-          <span className="font-semibold">{round.cc_name}</span>
-          <span className="text-sm text-muted-foreground">— {formatDate(round.play_date)}</span>
+      <div className={`relative flex items-start justify-between gap-4 border-b px-4 py-4 ${
+        isPublic ? 'border-sky-400/20 bg-black/10 backdrop-blur-sm' : 'border-border bg-muted/50'
+      }`}>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${colors.bg} ${colors.text}`}>
+              {round.play_type}
+            </span>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
+              isPublic
+                ? 'bg-sky-500/12 text-sky-700 ring-1 ring-sky-400/20 dark:bg-sky-500/14 dark:text-sky-200'
+                : 'bg-background text-muted-foreground'
+            }`}>
+              {isPublic ? <Globe2 className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+              {ROUND_VISIBILITY_LABELS[round.visibility]}
+            </span>
+            {isPublic && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-400/20 dark:bg-emerald-500/14 dark:text-emerald-200">
+                <Users2 className="h-3.5 w-3.5" />
+                {players.length}명 참여
+              </span>
+            )}
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="truncate text-xl font-semibold">{round.cc_name}</span>
+            <span className="text-sm text-muted-foreground">{formatDate(round.play_date)}</span>
+          </div>
+
+          {isPublic && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/60 px-3 py-1 text-xs font-medium text-sky-800 shadow-sm ring-1 ring-sky-200/70 dark:bg-white/6 dark:text-sky-100 dark:ring-white/10">
+              <Sparkles className="h-3.5 w-3.5" />
+              로그인한 누구나 보고 수정할 수 있는 공유 스코어카드
+            </p>
+          )}
         </div>
-        <div className="flex items-center gap-1">
-          {canEdit && (
-            <button
-              onClick={() => onEdit(round)}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
+
+        <div className="flex flex-col items-end gap-2">
+          {isPublic && (
+            <div className="hidden rounded-2xl border border-white/10 bg-black/10 px-3 py-2 text-right backdrop-blur sm:block dark:bg-white/5">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Par Total</div>
+              <div className="text-lg font-semibold">{parTotal}</div>
+            </div>
           )}
-          {isOwner && (
-            <button
-              onClick={() => onDelete(round.id)}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
+          <div className="flex items-center gap-1">
+            {canEdit && (
+              <button
+                onClick={() => onEdit(round)}
+                className={`rounded-lg p-1.5 transition-colors ${
+                  isPublic
+                    ? 'text-sky-700 hover:bg-sky-500/12 hover:text-sky-800 dark:text-sky-200 dark:hover:bg-sky-500/18 dark:hover:text-white'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            {isOwner && (
+              <button
+                onClick={() => onDelete(round.id)}
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* 스코어카드 테이블 */}
-      <div className="overflow-x-auto">
+      <div className={`overflow-x-auto ${isPublic ? 'px-3 pb-3 pt-2' : ''}`}>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-muted/30">
-              <th className="sticky left-0 z-10 bg-muted/80 px-3 py-2 text-left font-medium min-w-[80px]">홀</th>
+            <tr className={`border-b ${isPublic ? 'border-white/8 bg-black/10 dark:bg-white/[0.03]' : 'border-border bg-muted/30'}`}>
+              <th className={`sticky left-0 z-10 px-3 py-2 text-left font-medium min-w-[80px] ${
+                isPublic ? 'bg-black/20 backdrop-blur dark:bg-white/[0.05]' : 'bg-muted/80'
+              }`}>홀</th>
               {pars.map((_, i) => (
-                <th key={i} className="px-3 py-2 text-center font-bold text-red-700 dark:text-red-400 min-w-[44px]">
+                <th
+                  key={i}
+                  className={`px-3 py-2 text-center font-bold min-w-[44px] ${
+                    isPublic ? 'text-sky-700 dark:text-sky-300' : 'text-red-700 dark:text-red-400'
+                  }`}
+                >
                   {i + 1}
                 </th>
               ))}
-              <th className="px-3 py-2 text-center font-bold text-red-700 dark:text-red-400 min-w-[52px]">합계</th>
+              <th className={`px-3 py-2 text-center font-bold min-w-[52px] ${
+                isPublic ? 'text-sky-700 dark:text-sky-300' : 'text-red-700 dark:text-red-400'
+              }`}>합계</th>
             </tr>
-            <tr className="border-b border-border">
-              <td className="sticky left-0 z-10 bg-card px-3 py-1.5 font-medium">파</td>
+            <tr className={`border-b ${isPublic ? 'border-white/8' : 'border-border'}`}>
+              <td className={`sticky left-0 z-10 px-3 py-1.5 font-medium ${
+                isPublic ? 'bg-background/95 backdrop-blur dark:bg-background/80' : 'bg-card'
+              }`}>파</td>
               {pars.map((p, i) => (
                 <td key={i} className="px-3 py-1.5 text-center">{p}</td>
               ))}
@@ -106,9 +190,16 @@ export function Scorecard({ round, currentUserId, onEdit, onDelete }: Props) {
             ) : (
               players.map((player, idx) => {
                 const rowColor = PLAYER_ROW_COLORS[idx % PLAYER_ROW_COLORS.length]
+                const publicRowStyle = PUBLIC_ROW_STYLES[idx % PUBLIC_ROW_STYLES.length]
+                const rowTone = isPublic ? publicRowStyle.row : rowColor
+                const nameTone = isPublic ? publicRowStyle.name : rowColor
                 return (
-                  <tr key={player.id} className={`border-b border-border/50 ${rowColor}`}>
-                    <td className={`sticky left-0 z-10 ${rowColor} px-3 py-2 font-semibold`}>
+                  <tr key={player.id} className={`border-b border-border/40 ${rowTone}`}>
+                    <td className={`sticky left-0 z-10 px-3 py-2 font-semibold shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)] ${
+                      isPublic
+                        ? `${nameTone} backdrop-blur`
+                        : nameTone
+                    }`}>
                       {player.player_name}
                     </td>
                     {(player.scores ?? []).map((s, i) => {
