@@ -22,6 +22,7 @@ interface ForecastHourData {
   time: string
   temp: number
   pop: number
+  rainfall: string
   pty: number
   ptyText: string
   sky: number
@@ -30,10 +31,20 @@ interface ForecastHourData {
   humidity: number
 }
 
+interface ForecastDayPeriod {
+  label: string
+  weatherText: string
+  pop: number
+}
+
 interface ForecastDayData {
   date: string
   minTemp: number
   maxTemp: number
+  source: 'short' | 'mid'
+  weatherText: string
+  precipProbability: number
+  periods: ForecastDayPeriod[]
   hours: ForecastHourData[]
 }
 
@@ -42,6 +53,8 @@ interface ForecastResponse {
   location: { lat: number; lng: number; nx: number; ny: number }
   baseDate: string
   baseTime: string
+  midBaseDate?: string
+  midBaseTime?: string
   days: ForecastDayData[]
 }
 
@@ -76,6 +89,19 @@ function getForecastIcon(sky: number, precipType: number) {
   }
   if (sky === 3) {
     return { Icon: CloudSun, color: 'text-orange-300', bg: 'from-orange-400/20 to-amber-500/10' }
+  }
+  return { Icon: Cloud, color: 'text-slate-400', bg: 'from-slate-400/20 to-slate-500/10' }
+}
+
+function getMidForecastIcon(weatherText: string) {
+  if (weatherText.includes('눈')) {
+    return { Icon: CloudSnow, color: 'text-sky-300', bg: 'from-sky-400/20 to-sky-500/10' }
+  }
+  if (weatherText.includes('비')) {
+    return { Icon: CloudRain, color: 'text-blue-400', bg: 'from-blue-500/20 to-blue-600/10' }
+  }
+  if (weatherText.includes('맑')) {
+    return { Icon: CloudSun, color: 'text-yellow-400', bg: 'from-amber-400/20 to-orange-400/10' }
   }
   return { Icon: Cloud, color: 'text-slate-400', bg: 'from-slate-400/20 to-slate-500/10' }
 }
@@ -129,7 +155,7 @@ export function WeatherDialog({ ccName, playDate, playTime, onClose }: Props) {
   const [forecastData, setForecastData] = useState<{
     source: ForecastResponse
     day: ForecastDayData
-    focusHour: ForecastHourData
+    focusHour: ForecastHourData | null
   } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -178,7 +204,7 @@ export function WeatherDialog({ ccName, playDate, playTime, onClose }: Props) {
         setForecastData({
           source: forecast,
           day,
-          focusHour: getFocusHour(day, playTime),
+          focusHour: day.hours.length > 0 ? getFocusHour(day, playTime) : null,
         })
       } catch (err) {
         setError(err instanceof Error ? err.message : '알 수 없는 오류')
@@ -191,13 +217,17 @@ export function WeatherDialog({ ccName, playDate, playTime, onClose }: Props) {
 
   const currentWeather = currentData?.weather
   const forecastDay = forecastData?.day
-  const forecastHour = forecastData?.focusHour
+  const forecastHour = forecastData?.focusHour ?? null
   const currentIcon = getWeatherIcon(currentWeather?.precipType ?? 0)
-  const forecastIcon = getForecastIcon(forecastHour?.sky ?? 1, forecastHour?.pty ?? 0)
-  const maxPop = forecastDay ? Math.max(...forecastDay.hours.map((hour) => hour.pop)) : 0
+  const forecastIcon = forecastHour
+    ? getForecastIcon(forecastHour.sky, forecastHour.pty)
+    : getMidForecastIcon(forecastDay?.weatherText ?? '')
+  const maxPop = forecastDay
+    ? (forecastDay.hours.length > 0 ? Math.max(...forecastDay.hours.map((hour) => hour.pop)) : forecastDay.precipProbability)
+    : 0
   const forecastSummary = forecastHour
     ? (forecastHour.pty > 0 ? forecastHour.ptyText : forecastHour.skyText)
-    : ''
+    : (forecastDay?.weatherText ?? '')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
@@ -303,7 +333,7 @@ export function WeatherDialog({ ccName, playDate, playTime, onClose }: Props) {
           </>
         )}
 
-        {forecastData && forecastDay && forecastHour && !loading && (
+        {forecastData && forecastDay && !loading && (
           <>
             <div className={`relative rounded-t-2xl bg-gradient-to-br ${forecastIcon.bg} p-5`}>
               <button
@@ -316,8 +346,17 @@ export function WeatherDialog({ ccName, playDate, playTime, onClose }: Props) {
                 <forecastIcon.Icon className={`h-14 w-14 ${forecastIcon.color}`} />
                 <div>
                   <div className="text-4xl font-bold tracking-tight">
-                    {Math.round(forecastHour.temp)}
-                    <span className="text-lg font-normal text-muted-foreground">°C</span>
+                    {forecastHour ? (
+                      <>
+                        {Math.round(forecastHour.temp)}
+                        <span className="text-lg font-normal text-muted-foreground">°C</span>
+                      </>
+                    ) : (
+                      <>
+                        {Math.round(forecastDay.maxTemp)}°
+                        <span className="text-lg font-normal text-muted-foreground"> / {Math.round(forecastDay.minTemp)}°</span>
+                      </>
+                    )}
                   </div>
                   <div className="mt-0.5 text-sm font-medium text-muted-foreground">
                     {forecastSummary}
@@ -327,8 +366,12 @@ export function WeatherDialog({ ccName, playDate, playTime, onClose }: Props) {
               <div className="mt-3 space-y-1 text-xs text-muted-foreground">
                 <p>{forecastData.source.ccName} &middot; {formatPlayDate(playDate)} 예약일 예보</p>
                 <p>
-                  {playTime ? `${playTime} 기준 인접 시간대` : `${forecastHour.time.slice(0, 2)}:00 대표 예보`} ·
-                  {' '}발표 {forecastData.source.baseDate.slice(4, 6)}/{forecastData.source.baseDate.slice(6)} {forecastData.source.baseTime.slice(0, 2)}:00
+                  {forecastHour
+                    ? `${playTime ? `${playTime} 기준 인접 시간대` : `${forecastHour.time.slice(0, 2)}:00 대표 예보`}`
+                    : '중기예보 일별 요약'} ·{' '}
+                  발표 {forecastHour
+                    ? `${forecastData.source.baseDate.slice(4, 6)}/${forecastData.source.baseDate.slice(6)} ${forecastData.source.baseTime.slice(0, 2)}:00`
+                    : `${forecastData.source.midBaseDate?.slice(4, 6) ?? forecastData.source.baseDate.slice(4, 6)}/${forecastData.source.midBaseDate?.slice(6) ?? forecastData.source.baseDate.slice(6)} ${(forecastData.source.midBaseTime ?? forecastData.source.baseTime).slice(0, 2)}:00`}
                 </p>
               </div>
             </div>
@@ -346,27 +389,33 @@ export function WeatherDialog({ ccName, playDate, playTime, onClose }: Props) {
               <div className="flex items-center gap-2.5 bg-card p-3.5">
                 <Droplets className="h-4 w-4 shrink-0 text-blue-400" />
                 <div>
-                  <div className="text-[11px] text-muted-foreground">강수확률</div>
+                  <div className="text-[11px] text-muted-foreground">{forecastHour ? '강수확률' : '대표 강수확률'}</div>
                   <div className="text-sm font-semibold">{maxPop}%</div>
                 </div>
               </div>
               <div className="flex items-center gap-2.5 bg-card p-3.5">
                 <Wind className="h-4 w-4 shrink-0 text-teal-400" />
                 <div>
-                  <div className="text-[11px] text-muted-foreground">바람</div>
-                  <div className="text-sm font-semibold">
-                    {forecastHour.windSpeed}m/s
-                    <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                      {getWindLabel(forecastHour.windSpeed)}
-                    </span>
-                  </div>
+                  <div className="text-[11px] text-muted-foreground">{forecastHour ? '바람' : '예보구간'}</div>
+                  {forecastHour ? (
+                    <div className="text-sm font-semibold">
+                      {forecastHour.windSpeed}m/s
+                      <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                        {getWindLabel(forecastHour.windSpeed)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-sm font-semibold">
+                      {forecastDay.periods.map((period) => period.label).join(' · ')}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2.5 bg-card p-3.5">
                 <CloudRain className="h-4 w-4 shrink-0 text-indigo-400" />
                 <div>
-                  <div className="text-[11px] text-muted-foreground">습도</div>
-                  <div className="text-sm font-semibold">{forecastHour.humidity}%</div>
+                  <div className="text-[11px] text-muted-foreground">{forecastHour ? '습도' : '예보'}</div>
+                  <div className="text-sm font-semibold">{forecastHour ? `${forecastHour.humidity}%` : forecastDay.weatherText}</div>
                 </div>
               </div>
             </div>
@@ -390,12 +439,13 @@ function getGolfComment(temp: number, wind: number, precipType: number, rainfall
   return '즐거운 라운딩 되세요!'
 }
 
-function getForecastGolfComment(day: ForecastDayData, hour: ForecastHourData): string {
-  const maxPop = Math.max(...day.hours.map((item) => item.pop))
-  if (hour.pty > 0 || maxPop >= 60) return '예약일 비 가능성이 있습니다. 우천 대비를 권장합니다.'
-  if (hour.windSpeed >= 10) return '예약 시간대 바람이 강할 수 있습니다. 클럽 선택에 유의하세요.'
+function getForecastGolfComment(day: ForecastDayData, hour: ForecastHourData | null): string {
+  const maxPop = day.hours.length > 0 ? Math.max(...day.hours.map((item) => item.pop)) : day.precipProbability
+  if (hour && (hour.pty > 0 || maxPop >= 60)) return '예약일 비 가능성이 있습니다. 우천 대비를 권장합니다.'
+  if (!hour && maxPop >= 60) return '예약일 비 가능성이 있습니다. 일정 전 최신 단기예보를 다시 확인하세요.'
+  if (hour && hour.windSpeed >= 10) return '예약 시간대 바람이 강할 수 있습니다. 클럽 선택에 유의하세요.'
   if (day.minTemp < 5) return '예약일 아침 기온이 낮습니다. 방한 준비가 필요합니다.'
   if (day.maxTemp > 30) return '예약일 낮 기온이 높을 수 있습니다. 수분 보충을 준비하세요.'
-  if (day.minTemp >= 10 && day.maxTemp <= 25 && hour.windSpeed < 6) return '예약일 컨디션이 무난합니다. 라운딩하기 좋은 편입니다.'
+  if (hour && day.minTemp >= 10 && day.maxTemp <= 25 && hour.windSpeed < 6) return '예약일 컨디션이 무난합니다. 라운딩하기 좋은 편입니다.'
   return '예약일 예보 기준으로 무난한 컨디션입니다.'
 }

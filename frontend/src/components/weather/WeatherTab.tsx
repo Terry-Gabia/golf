@@ -5,6 +5,7 @@ interface HourData {
   time: string
   temp: number
   pop: number
+  rainfall: string
   pty: number
   ptyText: string
   sky: number
@@ -13,10 +14,20 @@ interface HourData {
   humidity: number
 }
 
+interface DayPeriodData {
+  label: string
+  weatherText: string
+  pop: number
+}
+
 interface DayData {
   date: string
   minTemp: number
   maxTemp: number
+  source: 'short' | 'mid'
+  weatherText: string
+  precipProbability: number
+  periods: DayPeriodData[]
   hours: HourData[]
 }
 
@@ -25,6 +36,8 @@ interface ForecastResponse {
   location: { lat: number; lng: number; nx: number; ny: number }
   baseDate: string
   baseTime: string
+  midBaseDate?: string
+  midBaseTime?: string
   days: DayData[]
 }
 
@@ -66,8 +79,10 @@ function formatTime(timeStr: string) {
 
 function getGolfScore(day: DayData) {
   const avgTemp = (day.minTemp + day.maxTemp) / 2
-  const maxPop = Math.max(...day.hours.map((h) => h.pop))
-  const avgWind = day.hours.reduce((s, h) => s + h.windSpeed, 0) / day.hours.length
+  const maxPop = day.hours.length > 0 ? Math.max(...day.hours.map((h) => h.pop)) : day.precipProbability
+  const avgWind = day.hours.length > 0
+    ? day.hours.reduce((s, h) => s + h.windSpeed, 0) / day.hours.length
+    : 0
   let score = 100
   if (avgTemp < 5 || avgTemp > 35) score -= 30
   else if (avgTemp < 10 || avgTemp > 30) score -= 15
@@ -76,6 +91,26 @@ function getGolfScore(day: DayData) {
   if (avgWind > 10) score -= 20
   else if (avgWind > 6) score -= 10
   return Math.max(0, Math.min(100, score))
+}
+
+function getRainfallScore(value: string) {
+  const normalized = value.trim()
+  if (!normalized || normalized === '0mm' || normalized === '강수없음') return 0
+  if (normalized.includes('미만')) {
+    const match = normalized.match(/\d+(\.\d+)?/)
+    return match ? Number.parseFloat(match[0]) : 0.5
+  }
+  const matches = normalized.match(/\d+(\.\d+)?/g)
+  if (!matches) return 0
+  return Math.max(...matches.map(Number.parseFloat))
+}
+
+function getPeakRainfall(hours: HourData[]) {
+  const rainyHours = hours.filter((hour) => getRainfallScore(hour.rainfall) > 0)
+  if (rainyHours.length === 0) return null
+  return rainyHours.reduce((peak, hour) => (
+    getRainfallScore(hour.rainfall) > getRainfallScore(peak.rainfall) ? hour : peak
+  ))
 }
 
 function getScoreLabel(score: number) {
@@ -221,17 +256,22 @@ export function WeatherTab() {
             const { display, isWeekend } = formatDate(day.date)
             const score = getGolfScore(day)
             const scoreLabel = getScoreLabel(score)
-            const maxPop = Math.max(...day.hours.map((h) => h.pop))
-            // 대표 하늘상태: 낮 시간(9~18시) 중 가장 안 좋은 상태
+            const maxPop = day.hours.length > 0 ? Math.max(...day.hours.map((h) => h.pop)) : day.precipProbability
+            const peakRain = day.hours.length > 0 ? getPeakRainfall(day.hours) : null
             const dayHours = day.hours.filter((h) => {
               const hr = parseInt(h.time.slice(0, 2))
               return hr >= 9 && hr <= 18
             })
-            const repHour = dayHours.length > 0
-              ? dayHours.reduce((worst, h) => (h.pty > worst.pty || h.sky > worst.sky ? h : worst), dayHours[0])
-              : day.hours[0]
+            const repHour = day.hours.length > 0
+              ? (dayHours.length > 0
+                ? dayHours.reduce((worst, h) => (h.pty > worst.pty || h.sky > worst.sky ? h : worst), dayHours[0])
+                : day.hours[0])
+              : null
             const SkyIcon = repHour ? getSkyIcon(repHour.sky, repHour.pty) : Sun
             const skyColor = repHour ? getSkyColor(repHour.sky, repHour.pty) : 'text-yellow-400'
+            const summaryText = repHour
+              ? (repHour.pty > 0 ? repHour.ptyText : repHour.skyText)
+              : day.weatherText
 
             return (
               <div key={day.date} className="rounded-xl border border-border bg-card overflow-hidden">
@@ -251,10 +291,17 @@ export function WeatherTab() {
                       <span>
                         {Math.round(day.minTemp)}° / <span className="font-medium text-foreground">{Math.round(day.maxTemp)}°</span>
                       </span>
+                      <span>{summaryText}</span>
                       {maxPop > 0 && (
                         <span className="flex items-center gap-0.5">
                           <Droplets className="h-3 w-3 text-blue-400" />
                           {maxPop}%
+                        </span>
+                      )}
+                      {peakRain && (
+                        <span className="flex items-center gap-0.5 text-blue-400">
+                          <CloudRain className="h-3 w-3" />
+                          {peakRain.rainfall}
                         </span>
                       )}
                       {repHour && (
@@ -270,40 +317,65 @@ export function WeatherTab() {
                   </div>
                 </div>
 
-                {/* 시간대별 스크롤 */}
-                <div className="border-t border-border bg-muted/20 px-1 py-2">
-                  <div className="flex gap-0.5 overflow-x-auto scrollbar-none">
-                    {day.hours.map((h) => {
-                      const HIcon = getSkyIcon(h.sky, h.pty)
-                      const hColor = getSkyColor(h.sky, h.pty)
-                      const hr = parseInt(h.time.slice(0, 2))
-                      const isDayHour = hr >= 7 && hr <= 19
-                      return (
-                        <div
-                          key={h.time}
-                          className={`flex shrink-0 flex-col items-center gap-0.5 rounded-lg px-2.5 py-1.5 ${
-                            isDayHour ? '' : 'opacity-50'
-                          }`}
-                        >
-                          <span className="text-[10px] text-muted-foreground">{formatTime(h.time)}</span>
-                          <HIcon className={`h-4 w-4 ${hColor}`} />
-                          <span className="text-xs font-medium">{Math.round(h.temp)}°</span>
-                          {h.pop > 0 && (
-                            <span className="text-[10px] text-blue-400">{h.pop}%</span>
-                          )}
-                        </div>
-                      )
-                    })}
+                {day.hours.length > 0 ? (
+                  <div className="border-t border-border bg-muted/20 px-1 py-2">
+                    <div className="flex gap-1 overflow-x-auto scrollbar-none">
+                      {day.hours.map((h) => {
+                        const HIcon = getSkyIcon(h.sky, h.pty)
+                        const hColor = getSkyColor(h.sky, h.pty)
+                        const hr = parseInt(h.time.slice(0, 2))
+                        const isDayHour = hr >= 7 && hr <= 19
+                        const hasRainfall = getRainfallScore(h.rainfall) > 0
+
+                        return (
+                          <div
+                            key={h.time}
+                            className={`flex min-w-[76px] shrink-0 flex-col items-center gap-1 rounded-lg border border-transparent px-2.5 py-2 ${
+                              isDayHour ? 'bg-background/70' : 'opacity-55'
+                            } ${hasRainfall ? 'ring-1 ring-blue-400/20' : ''}`}
+                          >
+                            <span className="text-[10px] text-muted-foreground">{formatTime(h.time)}</span>
+                            <HIcon className={`h-4 w-4 ${hColor}`} />
+                            <span className="text-xs font-medium">{Math.round(h.temp)}°</span>
+                            <span className={`text-[10px] font-medium ${hasRainfall ? 'text-blue-400' : 'text-muted-foreground'}`}>
+                              {hasRainfall ? h.rainfall : '-'}
+                            </span>
+                            <span className="text-[10px] text-blue-400">{h.pop > 0 ? `${h.pop}%` : ' '}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="grid gap-px border-t border-border bg-border sm:grid-cols-2">
+                    {day.periods.map((period) => (
+                      <div key={`${day.date}-${period.label}`} className="bg-muted/20 px-4 py-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-foreground">{period.label}</span>
+                          <span className="inline-flex items-center gap-1 text-xs text-blue-400">
+                            <Droplets className="h-3 w-3" />
+                            {period.pop}%
+                          </span>
+                        </div>
+                        <div className="mt-1 text-sm text-muted-foreground">{period.weatherText}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}
 
           {/* 안내 */}
-          <p className="text-center text-[11px] text-muted-foreground">
-            기상청 단기예보 기준 · {data.baseDate.slice(4, 6)}/{data.baseDate.slice(6)} {data.baseTime.slice(0, 2)}시 발표
-          </p>
+          <div className="space-y-1 text-center text-[11px] text-muted-foreground">
+            <p>
+              시간별 강수량은 단기예보 범위에서 제공됩니다. 그 이후 4~10일 구간은 중기예보 기준 일별/오전·오후 강수확률로 표시합니다.
+            </p>
+            <p>
+              단기예보 {data.baseDate.slice(4, 6)}/{data.baseDate.slice(6)} {data.baseTime.slice(0, 2)}시 발표
+              {data.midBaseDate && data.midBaseTime ? ` · 중기예보 ${data.midBaseDate.slice(4, 6)}/${data.midBaseDate.slice(6)} ${data.midBaseTime.slice(0, 2)}시 발표` : ''}
+            </p>
+          </div>
         </div>
       )}
     </div>

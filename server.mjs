@@ -254,6 +254,132 @@ function getFcstBaseDateTime() {
 }
 
 const SKY_MAP = { 1: '맑음', 3: '구름많음', 4: '흐림' }
+const MID_FORECAST_REGION = {
+  landRegId: '11B00000',
+  tempRegId: '11B20601',
+}
+
+function parseYmdToUtcDate(ymd) {
+  return new Date(Date.UTC(
+    Number.parseInt(ymd.slice(0, 4), 10),
+    Number.parseInt(ymd.slice(4, 6), 10) - 1,
+    Number.parseInt(ymd.slice(6, 8), 10),
+  ))
+}
+
+function formatUtcDateToYmd(date) {
+  return `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}${String(date.getUTCDate()).padStart(2, '0')}`
+}
+
+function addUtcDays(date, days) {
+  const next = new Date(date.getTime())
+  next.setUTCDate(next.getUTCDate() + days)
+  return next
+}
+
+function normalizeRainfall(value) {
+  const raw = String(value ?? '').trim()
+  if (!raw || raw === '강수없음' || raw === '0' || raw === '0.0' || raw === '0mm') return '0mm'
+  return raw.endsWith('mm') ? raw : `${raw}mm`
+}
+
+function getMidBaseDateTime() {
+  const now = new Date()
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
+  const hour = kst.getUTCHours()
+  const minute = kst.getUTCMinutes()
+  const date = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()))
+
+  if (hour < 6 || (hour === 6 && minute < 10)) {
+    date.setUTCDate(date.getUTCDate() - 1)
+    return { baseDate: formatUtcDateToYmd(date), baseTime: '1800' }
+  }
+
+  if (hour < 18 || (hour === 18 && minute < 10)) {
+    return { baseDate: formatUtcDateToYmd(date), baseTime: '0600' }
+  }
+
+  return { baseDate: formatUtcDateToYmd(date), baseTime: '1800' }
+}
+
+async function fetchKmaJson(apiUrl, label) {
+  const response = await fetch(apiUrl)
+  const text = await response.text()
+
+  if (!response.ok || text.startsWith('<') || text === 'Unauthorized') {
+    throw new Error(`${label} API 호출 실패 (${response.status}) ${text.substring(0, 120)}`)
+  }
+
+  let data
+  try {
+    data = JSON.parse(text)
+  } catch {
+    throw new Error(`${label} API 응답 파싱 실패`)
+  }
+
+  return data
+}
+
+function getFirstKmaItem(data) {
+  const items = data?.response?.body?.items?.item
+  if (Array.isArray(items)) return items[0] ?? null
+  return items ?? null
+}
+
+function buildMidTermDays(landItem, tempItem, baseDate) {
+  if (!landItem || !tempItem) return []
+
+  const base = parseYmdToUtcDate(baseDate)
+  const days = []
+
+  for (let offset = 4; offset <= 10; offset += 1) {
+    const date = formatUtcDateToYmd(addUtcDays(base, offset))
+    const minTemp = Number.parseFloat(tempItem[`taMin${offset}`] ?? '')
+    const maxTemp = Number.parseFloat(tempItem[`taMax${offset}`] ?? '')
+
+    if (Number.isNaN(minTemp) || Number.isNaN(maxTemp)) continue
+
+    if (offset <= 7) {
+      const amPop = Number.parseInt(landItem[`rnSt${offset}Am`] ?? '0', 10)
+      const pmPop = Number.parseInt(landItem[`rnSt${offset}Pm`] ?? '0', 10)
+      const amWeather = landItem[`wf${offset}Am`] ?? ''
+      const pmWeather = landItem[`wf${offset}Pm`] ?? ''
+
+      days.push({
+        date,
+        minTemp,
+        maxTemp,
+        source: 'mid',
+        weatherText: pmWeather || amWeather || '정보 없음',
+        precipProbability: Math.max(amPop || 0, pmPop || 0),
+        periods: [
+          { label: '오전', weatherText: amWeather || '정보 없음', pop: amPop || 0 },
+          { label: '오후', weatherText: pmWeather || '정보 없음', pop: pmPop || 0 },
+        ],
+        hours: [],
+      })
+      continue
+    }
+
+    const pop = Number.parseInt(landItem[`rnSt${offset}`] ?? '0', 10)
+    const weatherText = landItem[`wf${offset}`] ?? '정보 없음'
+
+    days.push({
+      date,
+      minTemp,
+      maxTemp,
+      source: 'mid',
+      weatherText,
+      precipProbability: pop || 0,
+      periods: [
+        { label: '하루', weatherText, pop: pop || 0 },
+      ],
+      hours: [],
+    })
+  }
+
+  return days
+}
 
 async function handleForecast(url, res) {
   const ccName = url.searchParams.get('ccName')
@@ -287,20 +413,7 @@ async function handleForecast(url, res) {
     const { baseDate, baseTime } = getFcstBaseDateTime()
 
     const apiUrl = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${encodeURIComponent(KMA_API_KEY)}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`
-    const kmaRes = await fetch(apiUrl)
-    const kmaText = await kmaRes.text()
-
-    if (!kmaRes.ok || kmaText.startsWith('<') || kmaText === 'Unauthorized') {
-      console.error('KMA forecast error:', kmaRes.status, kmaText.substring(0, 200))
-      jsonResponse(res, { error: '기상청 API 호출에 실패했습니다.' }, 502)
-      return
-    }
-
-    let kmaData
-    try { kmaData = JSON.parse(kmaText) } catch {
-      jsonResponse(res, { error: '기상청 응답을 파싱할 수 없습니다.' }, 502)
-      return
-    }
+    const kmaData = await fetchKmaJson(apiUrl, '단기예보')
 
     const items = kmaData?.response?.body?.items?.item
     if (!items || items.length === 0) {
@@ -320,32 +433,82 @@ async function handleForecast(url, res) {
     const byDate = {}
     for (const slot of Object.values(byDateTime)) {
       const d = slot.date
-      if (!byDate[d]) byDate[d] = { date: d, minTemp: 999, maxTemp: -999, hours: [] }
+      if (!byDate[d]) {
+        byDate[d] = {
+          date: d,
+          minTemp: 999,
+          maxTemp: -999,
+          source: 'short',
+          weatherText: '',
+          precipProbability: 0,
+          periods: [],
+          hours: [],
+        }
+      }
       const temp = parseFloat(slot.TMP || slot.T3H || 0)
       if (temp < byDate[d].minTemp) byDate[d].minTemp = temp
       if (temp > byDate[d].maxTemp) byDate[d].maxTemp = temp
       // TMN/TMX가 있으면 사용
       if (slot.TMN) byDate[d].minTemp = Math.min(byDate[d].minTemp, parseFloat(slot.TMN))
       if (slot.TMX) byDate[d].maxTemp = Math.max(byDate[d].maxTemp, parseFloat(slot.TMX))
+      const pop = parseInt(slot.POP || 0)
+      const pty = parseInt(slot.PTY || 0)
+      const sky = parseInt(slot.SKY || 1)
       byDate[d].hours.push({
         time: slot.time,
         temp,
-        pop: parseInt(slot.POP || 0),
-        pty: parseInt(slot.PTY || 0),
-        ptyText: PTY_MAP[parseInt(slot.PTY || 0)] || '없음',
-        sky: parseInt(slot.SKY || 1),
-        skyText: SKY_MAP[parseInt(slot.SKY || 1)] || '맑음',
+        pop,
+        rainfall: normalizeRainfall(slot.PCP),
+        pty,
+        ptyText: PTY_MAP[pty] || '없음',
+        sky,
+        skyText: SKY_MAP[sky] || '맑음',
         windSpeed: parseFloat(slot.WSD || 0),
         humidity: parseInt(slot.REH || 0),
       })
+      byDate[d].precipProbability = Math.max(byDate[d].precipProbability, pop)
     }
 
-    const days = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
+    const shortDays = Object.values(byDate)
+      .map((day) => ({
+        ...day,
+        weatherText: day.hours.find((slot) => parseInt(slot.time.slice(0, 2), 10) >= 12)?.pty > 0
+          ? day.hours.find((slot) => parseInt(slot.time.slice(0, 2), 10) >= 12)?.ptyText ?? '없음'
+          : day.hours.find((slot) => parseInt(slot.time.slice(0, 2), 10) >= 12)?.skyText ?? '맑음',
+        hours: day.hours.sort((a, b) => a.time.localeCompare(b.time)),
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    const { landRegId, tempRegId } = MID_FORECAST_REGION
+    const { baseDate: midBaseDate, baseTime: midBaseTime } = getMidBaseDateTime()
+    const tmFc = `${midBaseDate}${midBaseTime}`
+    const landUrl = `https://apis.data.go.kr/1360000/MidFcstInfoService/getMidLandFcst?serviceKey=${encodeURIComponent(KMA_API_KEY)}&pageNo=1&numOfRows=10&dataType=JSON&regId=${landRegId}&tmFc=${tmFc}`
+    const tempUrl = `https://apis.data.go.kr/1360000/MidFcstInfoService/getMidTa?serviceKey=${encodeURIComponent(KMA_API_KEY)}&pageNo=1&numOfRows=10&dataType=JSON&regId=${tempRegId}&tmFc=${tmFc}`
+
+    let midDays = []
+    try {
+      const [landData, tempData] = await Promise.all([
+        fetchKmaJson(landUrl, '중기육상예보'),
+        fetchKmaJson(tempUrl, '중기기온예보'),
+      ])
+      midDays = buildMidTermDays(getFirstKmaItem(landData), getFirstKmaItem(tempData), midBaseDate)
+    } catch (midError) {
+      console.error('Mid forecast API error:', midError)
+    }
+
+    const days = [
+      ...shortDays,
+      ...midDays.filter((midDay) => !shortDays.some((shortDay) => shortDay.date === midDay.date)),
+    ]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 10)
 
     jsonResponse(res, {
       ccName: address,
       location: { lat: latitude, lng: longitude, nx, ny },
       baseDate, baseTime,
+      midBaseDate,
+      midBaseTime,
       days,
     })
   } catch (err) {
