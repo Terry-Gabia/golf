@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { GalleryItem, GalleryMediaType } from '@/types'
+import type { GalleryComment, GalleryItem, GalleryMediaType } from '@/types'
 import { parseYouTubeLink } from '@/utils/youtube'
 
 const GALLERY_BUCKET = 'gallery-media'
@@ -51,22 +51,41 @@ export function useGallery(userId: string | null, userEmail: string | null) {
   const [items, setItems] = useState<GalleryItem[]>([])
   const [loading, setLoading] = useState(true)
 
+  const fetchCommentCountMap = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('gallery_comments')
+      .select('gallery_item_id')
+
+    if (error) throw error
+
+    return (data ?? []).reduce((accumulator, comment) => {
+      accumulator.set(comment.gallery_item_id, (accumulator.get(comment.gallery_item_id) ?? 0) + 1)
+      return accumulator
+    }, new Map<string, number>())
+  }, [])
+
   const fetchGallery = useCallback(async () => {
     if (!userId) return
 
-    const { data, error } = await supabase
-      .from('gallery_items')
-      .select('*')
-      .order('created_at', { ascending: false })
+    try {
+      const [{ data, error }, commentCountMap] = await Promise.all([
+        supabase
+          .from('gallery_items')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        fetchCommentCountMap(),
+      ])
 
-    if (error) {
+      if (error) throw error
+
+      setItems((data ?? []).map((item) => ({
+        ...item,
+        comment_count: commentCountMap.get(item.id) ?? 0,
+      })))
+    } finally {
       setLoading(false)
-      throw error
     }
-
-    setItems(data ?? [])
-    setLoading(false)
-  }, [userId])
+  }, [fetchCommentCountMap, userId])
 
   useEffect(() => {
     fetchGallery().catch(() => {
@@ -80,6 +99,9 @@ export function useGallery(userId: string | null, userEmail: string | null) {
     const channel = supabase
       .channel('gallery-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_items' }, () => {
+        fetchGallery().catch(() => undefined)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_comments' }, () => {
         fetchGallery().catch(() => undefined)
       })
       .subscribe()
@@ -179,5 +201,75 @@ export function useGallery(userId: string | null, userEmail: string | null) {
     []
   )
 
-  return { items, loading, uploadItem, deleteItem, refetch: fetchGallery }
+  const incrementView = useCallback(async (itemId: string) => {
+    const { error } = await supabase.rpc('increment_gallery_item_view', {
+      target_item_id: itemId,
+    })
+    if (error) throw error
+
+    setItems((prev) => prev.map((item) => (
+      item.id === itemId
+        ? { ...item, view_count: (item.view_count ?? 0) + 1 }
+        : item
+    )))
+  }, [])
+
+  const fetchComments = useCallback(async (galleryItemId: string) => {
+    const { data, error } = await supabase
+      .from('gallery_comments')
+      .select('*')
+      .eq('gallery_item_id', galleryItemId)
+      .order('created_at', { ascending: true })
+
+    if (error) throw error
+    return (data ?? []) as GalleryComment[]
+  }, [])
+
+  const addComment = useCallback(async (galleryItemId: string, content: string) => {
+    if (!userId) return
+
+    const { error } = await supabase
+      .from('gallery_comments')
+      .insert({
+        gallery_item_id: galleryItemId,
+        user_id: userId,
+        commenter_name: getUploaderName(userEmail),
+        content: content.trim(),
+      })
+
+    if (error) throw error
+
+    setItems((prev) => prev.map((item) => (
+      item.id === galleryItemId
+        ? { ...item, comment_count: (item.comment_count ?? 0) + 1 }
+        : item
+    )))
+  }, [userEmail, userId])
+
+  const deleteComment = useCallback(async (galleryItemId: string, commentId: string) => {
+    const { error } = await supabase
+      .from('gallery_comments')
+      .delete()
+      .eq('id', commentId)
+
+    if (error) throw error
+
+    setItems((prev) => prev.map((item) => (
+      item.id === galleryItemId
+        ? { ...item, comment_count: Math.max(0, (item.comment_count ?? 0) - 1) }
+        : item
+    )))
+  }, [])
+
+  return {
+    items,
+    loading,
+    uploadItem,
+    deleteItem,
+    fetchComments,
+    addComment,
+    deleteComment,
+    incrementView,
+    refetch: fetchGallery,
+  }
 }

@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS public.gallery_items (
   external_url  text,
   embed_url     text,
   thumbnail_url text,
+  view_count    integer NOT NULL DEFAULT 0,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
@@ -47,6 +48,9 @@ ALTER TABLE public.gallery_items
   ADD COLUMN IF NOT EXISTS thumbnail_url text;
 
 ALTER TABLE public.gallery_items
+  ADD COLUMN IF NOT EXISTS view_count integer NOT NULL DEFAULT 0;
+
+ALTER TABLE public.gallery_items
   DROP CONSTRAINT IF EXISTS gallery_items_source_type_check;
 
 ALTER TABLE public.gallery_items
@@ -55,13 +59,33 @@ ALTER TABLE public.gallery_items
 CREATE INDEX IF NOT EXISTS idx_gallery_items_created_at ON public.gallery_items(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gallery_items_user_id ON public.gallery_items(user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS public.gallery_comments (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  gallery_item_id uuid NOT NULL REFERENCES public.gallery_items(id) ON DELETE CASCADE,
+  user_id         uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  commenter_name  text NOT NULL,
+  content         text NOT NULL,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_gallery_comments_item_created_at
+  ON public.gallery_comments(gallery_item_id, created_at ASC);
+
+CREATE INDEX IF NOT EXISTS idx_gallery_comments_user_id
+  ON public.gallery_comments(user_id, created_at DESC);
+
 -- 3. RLS
 ALTER TABLE public.gallery_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gallery_comments ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Authenticated users can view gallery items" ON public.gallery_items;
 DROP POLICY IF EXISTS "Users can insert own gallery items" ON public.gallery_items;
 DROP POLICY IF EXISTS "Users can update own gallery items" ON public.gallery_items;
 DROP POLICY IF EXISTS "Users can delete own gallery items" ON public.gallery_items;
+DROP POLICY IF EXISTS "Authenticated users can view gallery comments" ON public.gallery_comments;
+DROP POLICY IF EXISTS "Users can insert own gallery comments" ON public.gallery_comments;
+DROP POLICY IF EXISTS "Users can update own gallery comments" ON public.gallery_comments;
+DROP POLICY IF EXISTS "Users can delete own gallery comments" ON public.gallery_comments;
 
 CREATE POLICY "Authenticated users can view gallery items" ON public.gallery_items
   FOR SELECT USING (auth.uid() IS NOT NULL);
@@ -75,6 +99,38 @@ CREATE POLICY "Users can update own gallery items" ON public.gallery_items
 
 CREATE POLICY "Users can delete own gallery items" ON public.gallery_items
   FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Authenticated users can view gallery comments" ON public.gallery_comments
+  FOR SELECT USING (auth.uid() IS NOT NULL);
+
+CREATE POLICY "Users can insert own gallery comments" ON public.gallery_comments
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own gallery comments" ON public.gallery_comments
+  FOR UPDATE USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own gallery comments" ON public.gallery_comments
+  FOR DELETE USING (auth.uid() = user_id);
+
+CREATE OR REPLACE FUNCTION public.increment_gallery_item_view(target_item_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  UPDATE public.gallery_items
+  SET view_count = COALESCE(view_count, 0) + 1
+  WHERE id = target_item_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.increment_gallery_item_view(uuid) TO authenticated;
 
 -- 4. Storage policies
 DROP POLICY IF EXISTS "Authenticated users can view gallery media" ON storage.objects;
@@ -122,5 +178,16 @@ BEGIN
     WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'gallery_items'
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.gallery_items;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'gallery_comments'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.gallery_comments;
   END IF;
 END $$;

@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { CalendarDays, Camera, Film, Images, Plus, Trash2, User } from 'lucide-react'
+import { CalendarDays, Camera, Eye, Film, Images, MessageCircle, Plus, Trash2, User } from 'lucide-react'
 import { GalleryUploadDialog } from './GalleryUploadDialog'
 import { GalleryViewerDialog } from './GalleryViewerDialog'
-import type { GalleryItem } from '@/types'
+import type { GalleryComment, GalleryItem } from '@/types'
 
 interface Props {
   items: GalleryItem[]
@@ -14,6 +14,10 @@ interface Props {
       | { youtubeUrl: string; title: string | null; description: string | null }
   ) => Promise<void>
   onDelete: (item: GalleryItem) => Promise<void>
+  onFetchComments: (galleryItemId: string) => Promise<GalleryComment[]>
+  onAddComment: (galleryItemId: string, content: string) => Promise<void>
+  onDeleteComment: (galleryItemId: string, commentId: string) => Promise<void>
+  onView: (itemId: string) => Promise<void>
 }
 
 function formatDate(dateStr: string) {
@@ -24,7 +28,17 @@ function formatDate(dateStr: string) {
   }).format(date)
 }
 
-export function GalleryTab({ items, loading, currentUserId, onUpload, onDelete }: Props) {
+export function GalleryTab({
+  items,
+  loading,
+  currentUserId,
+  onUpload,
+  onDelete,
+  onFetchComments,
+  onAddComment,
+  onDeleteComment,
+  onView,
+}: Props) {
   const [showUpload, setShowUpload] = useState(false)
   const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null)
 
@@ -156,6 +170,14 @@ export function GalleryTab({ items, loading, currentUserId, onUpload, onDelete }
                     <CalendarDays className="h-4 w-4" />
                     {formatDate(featured.created_at)}
                   </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Eye className="h-4 w-4" />
+                    {featured.view_count ?? 0}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <MessageCircle className="h-4 w-4" />
+                    {featured.comment_count ?? 0}
+                  </span>
                 </div>
               </div>
             </button>
@@ -200,6 +222,16 @@ export function GalleryTab({ items, loading, currentUserId, onUpload, onDelete }
                             <span>{item.uploader_name}</span>
                             <span>{formatDate(item.created_at)}</span>
                           </div>
+                          <div className="mt-2 flex items-center gap-3 text-[11px] text-white/80">
+                            <span className="inline-flex items-center gap-1">
+                              <Eye className="h-3.5 w-3.5" />
+                              {item.view_count ?? 0}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <MessageCircle className="h-3.5 w-3.5" />
+                              {item.comment_count ?? 0}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </button>
@@ -236,11 +268,16 @@ export function GalleryTab({ items, loading, currentUserId, onUpload, onDelete }
       {selectedItem && (
         <GalleryViewerDialog
           item={selectedItem}
+          currentUserId={currentUserId}
           canDelete={selectedItem.user_id === currentUserId}
           onDelete={async (item) => {
             await onDelete(item)
             setSelectedItem(null)
           }}
+          onFetchComments={onFetchComments}
+          onAddComment={onAddComment}
+          onDeleteComment={onDeleteComment}
+          onView={onView}
           onClose={() => setSelectedItem(null)}
         />
       )}

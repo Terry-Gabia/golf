@@ -16,7 +16,16 @@ export default function App() {
   const { theme, toggleTheme } = useTheme(user?.id ?? null)
   const { rounds, loading: roundsLoading, addRound, updateRound, deleteRound } = useGolfRounds(user?.id ?? null)
   const { notices, loading: noticesLoading, addNotice, updateNotice, deleteNotice, joinNotice, leaveNotice } = useNotices(user?.id ?? null)
-  const { items: galleryItems, loading: galleryLoading, uploadItem, deleteItem } = useGallery(user?.id ?? null, user?.email ?? null)
+  const {
+    items: galleryItems,
+    loading: galleryLoading,
+    uploadItem,
+    deleteItem,
+    fetchComments,
+    addComment,
+    deleteComment,
+    incrementView,
+  } = useGallery(user?.id ?? null, user?.email ?? null)
   const [activeTab, setActiveTab] = useState('scorecards')
 
   if (authLoading) {
@@ -81,6 +90,10 @@ export default function App() {
             currentUserId={user.id}
             onUpload={uploadItem}
             onDelete={deleteItem}
+            onFetchComments={fetchComments}
+            onAddComment={addComment}
+            onDeleteComment={deleteComment}
+            onView={incrementView}
           />
         )}
       </main>

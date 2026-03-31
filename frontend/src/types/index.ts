@@ -87,6 +87,17 @@ export interface GalleryItem {
   external_url?: string | null
   embed_url?: string | null
   thumbnail_url?: string | null
+  view_count?: number
+  comment_count?: number
+  created_at: string
+}
+
+export interface GalleryComment {
+  id: string
+  gallery_item_id: string
+  user_id: string
+  commenter_name: string
+  content: string
   created_at: string
 }
 
