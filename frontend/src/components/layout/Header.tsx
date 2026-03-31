@@ -21,16 +21,16 @@ export function Header({ user, theme, onToggleTheme, onSignOut, activeTab, onTab
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-6">
-          <h1 className="text-xl font-bold text-primary">⛳ 피터파의 샷점검</h1>
+      <div className="mx-auto flex max-w-4xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-6">
+          <h1 className="truncate text-lg font-bold text-primary sm:text-xl">⛳ 피터파의 샷점검</h1>
           {user && (
-            <nav className="flex gap-1">
+            <nav className="grid w-full grid-cols-3 gap-1 sm:flex sm:w-auto">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => onTabChange(tab.id)}
-                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors sm:px-3 ${
                     activeTab === tab.id
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -42,7 +42,7 @@ export function Header({ user, theme, onToggleTheme, onSignOut, activeTab, onTab
             </nav>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
           {user && (
             <>
