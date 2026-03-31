@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "build": "cd frontend && npm install && npm run build && cd ../backend && npm install",
+    "prepare:golf-coords": "node scripts/enrich-golf-course-coordinates.mjs --prepare-only",
+    "enrich:golf-coords": "node scripts/enrich-golf-course-coordinates.mjs",
     "start": "cd backend && node server.js",
     "dev": "cd backend && node --watch server.js"
   }
