@@ -267,6 +267,33 @@ function normalizeCourseName(value) {
     .replace(/클럽/g, '')
 }
 
+function normalizeCatalogHeader(value = '') {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[()]/g, '')
+}
+
+function findCatalogColumnIndex(headers, candidates, fallbackIndex = -1) {
+  const normalizedHeaders = headers.map((header) => normalizeCatalogHeader(header))
+  const normalizedCandidates = candidates.map((candidate) => normalizeCatalogHeader(candidate))
+
+  for (const candidate of normalizedCandidates) {
+    const matchedIndex = normalizedHeaders.findIndex((header) => header === candidate)
+    if (matchedIndex >= 0) return matchedIndex
+  }
+
+  return fallbackIndex
+}
+
+function parseCatalogCoordinate(value) {
+  if (value == null) return null
+
+  const parsed = Number.parseFloat(String(value).trim())
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 async function loadGolfCourseCatalog() {
   if (!golfCourseCatalogPromise) {
     golfCourseCatalogPromise = readFile(golfListPath, 'utf8')
@@ -274,14 +301,24 @@ async function loadGolfCourseCatalog() {
         const rows = parseCsv(raw.replace(/^\uFEFF/, ''))
         if (rows.length <= 1) return []
 
+        const headers = rows[0]
+        const regionIndex = findCatalogColumnIndex(headers, ['지역', 'region'], 0)
+        const nameIndex = findCatalogColumnIndex(headers, ['업소명', '골프장명', 'name'], 1)
+        const addressIndex = findCatalogColumnIndex(headers, ['소재지', '주소', 'address'], 3)
+        const holesIndex = findCatalogColumnIndex(headers, ['홀수(홀)', '홀수', 'holes'], 5)
+        const detailTypeIndex = findCatalogColumnIndex(headers, ['세부종류', '구분', 'type'], 6)
+        const latIndex = findCatalogColumnIndex(headers, ['위도', 'latitude', 'lat'])
+        const lngIndex = findCatalogColumnIndex(headers, ['경도', 'longitude', 'lng', 'lon'])
         const uniqueCourses = new Map()
 
         for (const row of rows.slice(1)) {
-          const region = row[0]?.trim()
-          const name = row[1]?.trim()
-          const address = row[3]?.trim()
-          const holes = row[5]?.trim()
-          const detailType = row[6]?.trim()
+          const region = row[regionIndex]?.trim()
+          const name = row[nameIndex]?.trim()
+          const address = row[addressIndex]?.trim()
+          const holes = row[holesIndex]?.trim()
+          const detailType = row[detailTypeIndex]?.trim()
+          const lat = latIndex >= 0 ? parseCatalogCoordinate(row[latIndex]) : null
+          const lng = lngIndex >= 0 ? parseCatalogCoordinate(row[lngIndex]) : null
 
           if (!region || !name || !address) continue
 
@@ -294,6 +331,8 @@ async function loadGolfCourseCatalog() {
             address,
             holes: holes ? Number.parseInt(holes, 10) : null,
             detailType: detailType || null,
+            lat,
+            lng,
             normalizedName,
           })
         }
@@ -343,12 +382,6 @@ async function geocodeQuery(query) {
 
 async function resolveCourseCoords(ccName) {
   const name = ccName.trim()
-  if (GOLF_COURSE_COORDS[name]) return GOLF_COURSE_COORDS[name]
-
-  for (const [key, coords] of Object.entries(GOLF_COURSE_COORDS)) {
-    if (name.includes(key) || key.includes(name)) return coords
-  }
-
   const courses = await loadGolfCourseCatalog()
   const normalizedName = normalizeCourseName(name)
   const matchedCourse = courses.find((course) => (
@@ -356,6 +389,18 @@ async function resolveCourseCoords(ccName) {
       || normalizedName.includes(course.normalizedName)
       || course.normalizedName.includes(normalizedName)
   ))
+
+  if (matchedCourse?.lat != null && matchedCourse?.lng != null) {
+    const coords = { lat: matchedCourse.lat, lng: matchedCourse.lng }
+    resolvedCourseCoordsCache.set(matchedCourse.normalizedName, coords)
+    return coords
+  }
+
+  if (GOLF_COURSE_COORDS[name]) return GOLF_COURSE_COORDS[name]
+
+  for (const [key, coords] of Object.entries(GOLF_COURSE_COORDS)) {
+    if (name.includes(key) || key.includes(name)) return coords
+  }
 
   if (!matchedCourse) return null
 
