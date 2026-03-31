@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 const port = Number.parseInt(process.env.PORT ?? '3000', 10)
 const baseDir = fileURLToPath(new URL('./dist', import.meta.url))
 const indexPath = join(baseDir, 'index.html')
+const golfListPath = fileURLToPath(new URL('./golflist.csv', import.meta.url))
 
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET
@@ -14,6 +15,9 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${port}`
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const KMA_API_KEY = process.env.KMA_API_KEY
+
+let golfCourseCatalogPromise = null
+const resolvedCourseCoordsCache = new Map()
 
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -207,12 +211,175 @@ const GOLF_COURSE_COORDS = {
   '블루언': { lat: 37.2200, lng: 127.2900 },
 }
 
-function findCourseCoords(ccName) {
+function parseCsv(text) {
+  const rows = []
+  let currentRow = []
+  let currentValue = ''
+  let inQuotes = false
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+
+    if (char === '"') {
+      if (inQuotes && text[index + 1] === '"') {
+        currentValue += '"'
+        index += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (!inQuotes && char === ',') {
+      currentRow.push(currentValue)
+      currentValue = ''
+      continue
+    }
+
+    if (!inQuotes && (char === '\n' || char === '\r')) {
+      if (char === '\r' && text[index + 1] === '\n') index += 1
+      currentRow.push(currentValue)
+      currentValue = ''
+      if (currentRow.some((value) => value.length > 0)) rows.push(currentRow)
+      currentRow = []
+      continue
+    }
+
+    currentValue += char
+  }
+
+  if (currentValue.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentValue)
+    if (currentRow.some((value) => value.length > 0)) rows.push(currentRow)
+  }
+
+  return rows
+}
+
+function normalizeCourseName(value) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/컨트리클럽/g, 'cc')
+    .replace(/골프클럽/g, 'gc')
+    .replace(/골프장/g, '')
+    .replace(/클럽/g, '')
+}
+
+async function loadGolfCourseCatalog() {
+  if (!golfCourseCatalogPromise) {
+    golfCourseCatalogPromise = readFile(golfListPath, 'utf8')
+      .then((raw) => {
+        const rows = parseCsv(raw.replace(/^\uFEFF/, ''))
+        if (rows.length <= 1) return []
+
+        const uniqueCourses = new Map()
+
+        for (const row of rows.slice(1)) {
+          const region = row[0]?.trim()
+          const name = row[1]?.trim()
+          const address = row[3]?.trim()
+          const holes = row[5]?.trim()
+          const detailType = row[6]?.trim()
+
+          if (!region || !name || !address) continue
+
+          const normalizedName = normalizeCourseName(name)
+          if (uniqueCourses.has(normalizedName)) continue
+
+          uniqueCourses.set(normalizedName, {
+            region,
+            name,
+            address,
+            holes: holes ? Number.parseInt(holes, 10) : null,
+            detailType: detailType || null,
+            normalizedName,
+          })
+        }
+
+        return Array.from(uniqueCourses.values())
+          .sort((left, right) => left.name.localeCompare(right.name, 'ko-KR'))
+      })
+      .catch((error) => {
+        console.error('Golf course catalog load error:', error)
+        return []
+      })
+  }
+
+  return golfCourseCatalogPromise
+}
+
+async function handleWeatherCourses(res) {
+  const courses = await loadGolfCourseCatalog()
+  const regions = [...new Set(courses.map((course) => course.region))]
+    .sort((left, right) => left.localeCompare(right, 'ko-KR'))
+
+  jsonResponse(res, { regions, courses })
+}
+
+async function geocodeQuery(query) {
+  const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=kr&q=${encodeURIComponent(query)}`
+  const response = await fetch(geocodeUrl, {
+    headers: {
+      'Accept-Language': 'ko,en;q=0.8',
+      'User-Agent': 'PeterParGolf/1.0 (+https://peterpar.up.railway.app)',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Geocode API 호출 실패 (${response.status})`)
+  }
+
+  const data = await response.json()
+  const first = Array.isArray(data) ? data[0] : null
+  if (!first?.lat || !first?.lon) return null
+
+  return {
+    lat: Number.parseFloat(first.lat),
+    lng: Number.parseFloat(first.lon),
+  }
+}
+
+async function resolveCourseCoords(ccName) {
   const name = ccName.trim()
   if (GOLF_COURSE_COORDS[name]) return GOLF_COURSE_COORDS[name]
+
   for (const [key, coords] of Object.entries(GOLF_COURSE_COORDS)) {
     if (name.includes(key) || key.includes(name)) return coords
   }
+
+  const courses = await loadGolfCourseCatalog()
+  const normalizedName = normalizeCourseName(name)
+  const matchedCourse = courses.find((course) => (
+    course.normalizedName === normalizedName
+      || normalizedName.includes(course.normalizedName)
+      || course.normalizedName.includes(normalizedName)
+  ))
+
+  if (!matchedCourse) return null
+
+  if (resolvedCourseCoordsCache.has(matchedCourse.normalizedName)) {
+    return resolvedCourseCoordsCache.get(matchedCourse.normalizedName)
+  }
+
+  const geocodeQueries = [
+    `${matchedCourse.name} ${matchedCourse.address}, 대한민국`,
+    `${matchedCourse.address}, 대한민국`,
+  ]
+
+  for (const query of geocodeQueries) {
+    try {
+      const coords = await geocodeQuery(query)
+      if (coords) {
+        resolvedCourseCoordsCache.set(matchedCourse.normalizedName, coords)
+        return coords
+      }
+    } catch (error) {
+      console.error('Course geocode error:', query, error)
+    }
+  }
+
   return null
 }
 
@@ -401,7 +568,7 @@ async function handleForecast(url, res) {
       latitude = parseFloat(lat); longitude = parseFloat(lng)
       address = ccName || `${lat}, ${lng}`
     } else {
-      const coords = findCourseCoords(ccName)
+      const coords = await resolveCourseCoords(ccName)
       if (!coords) {
         jsonResponse(res, { error: `"${ccName}" 골프장 좌표를 찾을 수 없습니다.` }, 404)
         return
@@ -538,7 +705,7 @@ async function handleWeather(url, res) {
       longitude = parseFloat(lng)
       address = ccName || `${lat}, ${lng}`
     } else {
-      const coords = findCourseCoords(ccName)
+      const coords = await resolveCourseCoords(ccName)
       if (!coords) {
         jsonResponse(res, { error: `"${ccName}" 골프장 좌표를 찾을 수 없습니다. 관리자에게 좌표 등록을 요청해주세요.` }, 404)
         return
@@ -630,6 +797,11 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === '/api/weather') {
     await handleWeather(url, res)
+    return
+  }
+
+  if (url.pathname === '/api/weather/courses') {
+    await handleWeatherCourses(res)
     return
   }
 

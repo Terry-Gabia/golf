@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Search, CloudSun, CloudRain, CloudSnow, Cloud, Sun, Wind, Droplets, X } from 'lucide-react'
 
 interface HourData {
@@ -41,11 +41,18 @@ interface ForecastResponse {
   days: DayData[]
 }
 
-const POPULAR_COURSES = [
-  '용인 블루언 CC', '분당그린피아', '남서울CC', '양지파인', '곤지암',
-  '기흥CC', '용인CC', '수원CC', '안양CC', '군포CC',
-  '이천', '여주', '리베라CC',
-]
+interface CourseItem {
+  region: string
+  name: string
+  address: string
+  holes: number | null
+  detailType: string | null
+}
+
+interface CourseCatalogResponse {
+  regions: string[]
+  courses: CourseItem[]
+}
 
 function getSkyIcon(sky: number, pty: number) {
   if (pty === 1 || pty === 2 || pty === 5 || pty === 6) return CloudRain
@@ -124,6 +131,10 @@ export function WeatherTab() {
   const [courseName, setCourseName] = useState('용인 블루언 CC')
   const [searchInput, setSearchInput] = useState('')
   const [showSearch, setShowSearch] = useState(false)
+  const [courses, setCourses] = useState<CourseItem[]>([])
+  const [regions, setRegions] = useState<string[]>([])
+  const [selectedRegion, setSelectedRegion] = useState('전체')
+  const [coursesLoading, setCoursesLoading] = useState(true)
   const [data, setData] = useState<ForecastResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -150,15 +161,45 @@ export function WeatherTab() {
     fetchForecast(courseName)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setCoursesLoading(true)
+        const res = await fetch('/api/weather/courses')
+        if (!res.ok) {
+          throw new Error('골프장 목록을 불러올 수 없습니다.')
+        }
+        const catalog = (await res.json()) as CourseCatalogResponse
+        setCourses(catalog.courses)
+        setRegions(catalog.regions)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setCoursesLoading(false)
+      }
+    }
+
+    fetchCourses()
+  }, [])
+
   const handleSearch = (name: string) => {
     setShowSearch(false)
     setSearchInput('')
     fetchForecast(name)
   }
 
-  const filteredCourses = searchInput.trim()
-    ? POPULAR_COURSES.filter((c) => c.includes(searchInput.trim()))
-    : POPULAR_COURSES
+  const filteredCourses = useMemo(() => {
+    const keyword = searchInput.trim()
+
+    return courses
+      .filter((course) => selectedRegion === '전체' || course.region === selectedRegion)
+      .filter((course) => (
+        !keyword
+          || course.name.includes(keyword)
+          || course.address.includes(keyword)
+      ))
+      .sort((left, right) => left.name.localeCompare(right.name, 'ko-KR'))
+  }, [courses, searchInput, selectedRegion])
 
   return (
     <div>
@@ -202,21 +243,59 @@ export function WeatherTab() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {filteredCourses.map((name) => (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {['전체', ...regions].map((region) => (
               <button
-                key={name}
-                onClick={() => handleSearch(name)}
-                className={`rounded-full px-3 py-1 text-xs transition-colors ${
-                  name === courseName
+                key={region}
+                onClick={() => setSelectedRegion(region)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  region === selectedRegion
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
                 }`}
               >
-                {name}
+                {region}
               </button>
             ))}
           </div>
+
+          <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+            <span>{selectedRegion} 골프장</span>
+            <span>{filteredCourses.length}개</span>
+          </div>
+
+          <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+            {coursesLoading ? (
+              <div className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                골프장 목록을 불러오는 중...
+              </div>
+            ) : filteredCourses.length > 0 ? (
+              filteredCourses.map((course) => (
+                <button
+                  key={`${course.region}-${course.name}`}
+                  onClick={() => handleSearch(course.name)}
+                  className={`block w-full rounded-xl border px-3 py-3 text-left transition-colors ${
+                    course.name === courseName
+                      ? 'border-primary/40 bg-primary/8'
+                      : 'border-border bg-background hover:border-primary/20 hover:bg-muted/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-medium">{course.name}</div>
+                    <div className="shrink-0 text-[11px] text-muted-foreground">
+                      {course.holes ? `${course.holes}홀` : course.region}
+                    </div>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">{course.address}</div>
+                </button>
+              ))
+            ) : (
+              <div className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+                조건에 맞는 골프장이 없습니다.
+              </div>
+            )}
+          </div>
+
           {searchInput.trim() && !filteredCourses.length && (
             <button
               onClick={() => handleSearch(searchInput.trim())}
