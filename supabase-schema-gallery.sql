@@ -24,11 +24,33 @@ CREATE TABLE IF NOT EXISTS public.gallery_items (
   title         text,
   description   text,
   media_type    text NOT NULL CHECK (media_type IN ('image', 'video')),
+  source_type   text NOT NULL DEFAULT 'upload' CHECK (source_type IN ('upload', 'youtube')),
   bucket_name   text NOT NULL DEFAULT 'gallery-media',
   file_path     text NOT NULL UNIQUE,
   public_url    text NOT NULL,
+  external_url  text,
+  embed_url     text,
+  thumbnail_url text,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.gallery_items
+  ADD COLUMN IF NOT EXISTS source_type text NOT NULL DEFAULT 'upload';
+
+ALTER TABLE public.gallery_items
+  ADD COLUMN IF NOT EXISTS external_url text;
+
+ALTER TABLE public.gallery_items
+  ADD COLUMN IF NOT EXISTS embed_url text;
+
+ALTER TABLE public.gallery_items
+  ADD COLUMN IF NOT EXISTS thumbnail_url text;
+
+ALTER TABLE public.gallery_items
+  DROP CONSTRAINT IF EXISTS gallery_items_source_type_check;
+
+ALTER TABLE public.gallery_items
+  ADD CONSTRAINT gallery_items_source_type_check CHECK (source_type IN ('upload', 'youtube'));
 
 CREATE INDEX IF NOT EXISTS idx_gallery_items_created_at ON public.gallery_items(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gallery_items_user_id ON public.gallery_items(user_id, created_at DESC);

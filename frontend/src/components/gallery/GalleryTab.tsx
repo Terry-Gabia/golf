@@ -8,7 +8,11 @@ interface Props {
   items: GalleryItem[]
   loading: boolean
   currentUserId: string
-  onUpload: (data: { file: File; title: string | null; description: string | null }) => Promise<void>
+  onUpload: (
+    data:
+      | { file: File; title: string | null; description: string | null }
+      | { youtubeUrl: string; title: string | null; description: string | null }
+  ) => Promise<void>
   onDelete: (item: GalleryItem) => Promise<void>
 }
 
@@ -28,6 +32,7 @@ export function GalleryTab({ items, loading, currentUserId, onUpload, onDelete }
   const restItems = featured ? items.slice(1) : []
   const imageCount = useMemo(() => items.filter((item) => item.media_type === 'image').length, [items])
   const videoCount = useMemo(() => items.filter((item) => item.media_type === 'video').length, [items])
+  const featuredIsYoutube = featured?.source_type === 'youtube'
 
   return (
     <div className="space-y-5">
@@ -41,7 +46,7 @@ export function GalleryTab({ items, loading, currentUserId, onUpload, onDelete }
             <h2 className="mt-4 text-2xl font-semibold tracking-tight">라운딩 사진과 영상을 모아두는 공간</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
               필드, 파3, 스크린 기록과 함께 현장 분위기도 남길 수 있게 구성했습니다.
-              사진은 크게, 동영상은 썸네일처럼 정리되고 클릭하면 바로 크게 볼 수 있습니다.
+              사진과 업로드 영상은 물론 유튜브 쇼츠 링크도 썸네일 카드로 정리되고 클릭하면 바로 크게 볼 수 있습니다.
             </p>
           </div>
 
@@ -71,7 +76,7 @@ export function GalleryTab({ items, loading, currentUserId, onUpload, onDelete }
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">갤러리</h3>
-          <p className="mt-1 text-sm text-muted-foreground">사진과 동영상을 업로드해서 팀 기록처럼 모아두세요.</p>
+          <p className="mt-1 text-sm text-muted-foreground">사진, 동영상, 유튜브 쇼츠 링크를 팀 기록처럼 모아두세요.</p>
         </div>
         <button
           onClick={() => setShowUpload(true)}
@@ -91,7 +96,7 @@ export function GalleryTab({ items, loading, currentUserId, onUpload, onDelete }
           </div>
           <h3 className="mt-5 text-xl font-semibold">첫 갤러리 업로드를 만들어보세요</h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            사진 한 장, 짧은 스윙 영상 하나만 올려도 갤러리가 바로 시작됩니다.
+            사진 한 장, 짧은 스윙 영상 하나, 유튜브 쇼츠 링크 하나만 있어도 갤러리가 바로 시작됩니다.
           </p>
           <button
             onClick={() => setShowUpload(true)}
@@ -110,14 +115,20 @@ export function GalleryTab({ items, loading, currentUserId, onUpload, onDelete }
               className="group grid w-full overflow-hidden rounded-3xl border border-border bg-card text-left shadow-sm transition-transform hover:-translate-y-0.5 lg:grid-cols-[1.15fr,0.85fr]"
             >
               <div className="relative min-h-[280px] overflow-hidden bg-black">
-                {featured.media_type === 'video' ? (
+                {featuredIsYoutube ? (
+                  <img
+                    src={featured.thumbnail_url || featured.public_url}
+                    alt={featured.title ?? 'featured youtube'}
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                  />
+                ) : featured.media_type === 'video' ? (
                   <video src={featured.public_url} muted playsInline className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
                 ) : (
                   <img src={featured.public_url} alt={featured.title ?? 'featured gallery'} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
                 <div className="absolute left-4 top-4 inline-flex rounded-full bg-black/55 px-3 py-1 text-xs font-medium text-white backdrop-blur">
-                  {featured.media_type === 'video' ? 'Featured Video' : 'Featured Photo'}
+                  {featuredIsYoutube ? 'Featured YouTube' : featured.media_type === 'video' ? 'Featured Video' : 'Featured Photo'}
                 </div>
               </div>
 
@@ -154,6 +165,7 @@ export function GalleryTab({ items, loading, currentUserId, onUpload, onDelete }
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {restItems.map((item) => {
                 const isOwner = item.user_id === currentUserId
+                const isYoutube = item.source_type === 'youtube'
                 return (
                   <div
                     key={item.id}
@@ -165,14 +177,20 @@ export function GalleryTab({ items, loading, currentUserId, onUpload, onDelete }
                       className="block w-full text-left"
                     >
                       <div className="relative aspect-[4/5] overflow-hidden bg-black">
-                        {item.media_type === 'video' ? (
+                        {isYoutube ? (
+                          <img
+                            src={item.thumbnail_url || item.public_url}
+                            alt={item.title ?? 'youtube item'}
+                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                          />
+                        ) : item.media_type === 'video' ? (
                           <video src={item.public_url} muted playsInline className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
                         ) : (
                           <img src={item.public_url} alt={item.title ?? 'gallery item'} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
                         )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
                         <div className="absolute left-3 top-3 inline-flex rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur">
-                          {item.media_type === 'video' ? '동영상' : '사진'}
+                          {isYoutube ? 'YouTube' : item.media_type === 'video' ? '동영상' : '사진'}
                         </div>
                         <div className="absolute bottom-0 left-0 right-0 p-4">
                           <h4 className="line-clamp-2 text-base font-semibold text-white">

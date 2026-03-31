@@ -20,6 +20,8 @@ function formatDate(dateStr: string) {
 }
 
 export function GalleryViewerDialog({ item, canDelete, onDelete, onClose }: Props) {
+  const isYoutube = item.source_type === 'youtube' && item.embed_url
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" onClick={onClose}>
       <div className="mx-auto flex min-h-screen w-full max-w-7xl items-center justify-center px-4 py-6">
@@ -34,7 +36,17 @@ export function GalleryViewerDialog({ item, canDelete, onDelete, onClose }: Prop
             >
               <X className="h-5 w-5" />
             </button>
-            {item.media_type === 'video' ? (
+            {isYoutube ? (
+              <div className="aspect-[9/16] w-full max-w-md overflow-hidden rounded-2xl">
+                <iframe
+                  src={item.embed_url ?? undefined}
+                  title={item.title ?? 'youtube video'}
+                  className="h-full w-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+            ) : item.media_type === 'video' ? (
               <video
                 src={item.public_url}
                 controls
@@ -55,7 +67,7 @@ export function GalleryViewerDialog({ item, canDelete, onDelete, onClose }: Prop
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
                   {item.media_type === 'video' ? <Video className="h-3.5 w-3.5" /> : null}
-                  {item.media_type === 'video' ? '동영상' : '사진'}
+                  {isYoutube ? 'YouTube' : item.media_type === 'video' ? '동영상' : '사진'}
                 </span>
               </div>
 
@@ -78,6 +90,16 @@ export function GalleryViewerDialog({ item, canDelete, onDelete, onClose }: Prop
                   <CalendarDays className="h-4 w-4" />
                   <span>{formatDate(item.created_at)}</span>
                 </div>
+                {isYoutube && item.external_url && (
+                  <a
+                    href={item.external_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex text-sm text-primary hover:underline"
+                  >
+                    원본 YouTube 열기
+                  </a>
+                )}
               </div>
             </div>
 

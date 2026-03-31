@@ -2,6 +2,7 @@ export type PlayType = '필드' | '파3' | '스크린'
 export type Theme = 'light' | 'dark'
 export type RoundVisibility = 'public' | 'private'
 export type GalleryMediaType = 'image' | 'video'
+export type GallerySourceType = 'upload' | 'youtube'
 
 export interface GolfRecord {
   id: string
@@ -79,9 +80,13 @@ export interface GalleryItem {
   title: string | null
   description: string | null
   media_type: GalleryMediaType
+  source_type?: GallerySourceType | null
   bucket_name: string
   file_path: string
   public_url: string
+  external_url?: string | null
+  embed_url?: string | null
+  thumbnail_url?: string | null
   created_at: string
 }
 

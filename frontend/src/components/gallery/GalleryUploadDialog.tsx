@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ImagePlus, UploadCloud, Video, X } from 'lucide-react'
+import { ImagePlus, Link2, UploadCloud, Video, X } from 'lucide-react'
+import { parseYouTubeLink } from '@/utils/youtube'
 
 interface Props {
-  onSubmit: (data: {
-    file: File
-    title: string | null
-    description: string | null
-  }) => Promise<void>
+  onSubmit: (data:
+    | {
+        file: File
+        title: string | null
+        description: string | null
+      }
+    | {
+        youtubeUrl: string
+        title: string | null
+        description: string | null
+      }
+  ) => Promise<void>
   onClose: () => void
 }
 
@@ -16,7 +24,9 @@ function getDefaultTitle(file: File | null) {
 }
 
 export function GalleryUploadDialog({ onSubmit, onClose }: Props) {
+  const [mode, setMode] = useState<'upload' | 'youtube'>('upload')
   const [file, setFile] = useState<File | null>(null)
+  const [youtubeUrl, setYoutubeUrl] = useState('')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
@@ -31,12 +41,13 @@ export function GalleryUploadDialog({ onSubmit, onClose }: Props) {
   }, [onClose])
 
   useEffect(() => {
-    if (file && !title.trim()) {
+    if (mode === 'upload' && file && !title.trim()) {
       setTitle(getDefaultTitle(file))
     }
-  }, [file, title])
+  }, [file, mode, title])
 
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file])
+  const parsedYoutube = useMemo(() => parseYouTubeLink(youtubeUrl), [youtubeUrl])
 
   useEffect(() => {
     return () => {
@@ -49,8 +60,32 @@ export function GalleryUploadDialog({ onSubmit, onClose }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!file) {
-      setError('사진 또는 동영상을 선택해주세요.')
+    if (mode === 'upload') {
+      if (!file) {
+        setError('사진 또는 동영상을 선택해주세요.')
+        return
+      }
+
+      setLoading(true)
+      setError('')
+
+      try {
+        await onSubmit({
+          file,
+          title: title.trim() || null,
+          description: description.trim() || null,
+        })
+        onClose()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '업로드에 실패했습니다.')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    if (!parsedYoutube) {
+      setError('유효한 유튜브 또는 쇼츠 링크를 입력해주세요.')
       return
     }
 
@@ -59,13 +94,13 @@ export function GalleryUploadDialog({ onSubmit, onClose }: Props) {
 
     try {
       await onSubmit({
-        file,
+        youtubeUrl: youtubeUrl.trim(),
         title: title.trim() || null,
         description: description.trim() || null,
       })
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '업로드에 실패했습니다.')
+      setError(err instanceof Error ? err.message : '링크 추가에 실패했습니다.')
     } finally {
       setLoading(false)
     }
@@ -88,55 +123,131 @@ export function GalleryUploadDialog({ onSubmit, onClose }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block cursor-pointer rounded-3xl border border-dashed border-primary/30 bg-gradient-to-br from-primary/8 via-background to-emerald-500/10 p-5 transition-colors hover:border-primary/50">
-            <input
-              type="file"
-              accept="image/*,video/*"
-              className="hidden"
-              onChange={(e) => {
-                const nextFile = e.target.files?.[0] ?? null
-                setFile(nextFile)
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('upload')
                 setError('')
               }}
-            />
+              className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                mode === 'upload' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+              }`}
+            >
+              파일 업로드
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode('youtube')
+                setError('')
+              }}
+              className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                mode === 'youtube' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+              }`}
+            >
+              YouTube 링크
+            </button>
+          </div>
 
-            {previewUrl ? (
-              <div className="grid gap-4 md:grid-cols-[1.1fr,0.9fr]">
-                <div className="overflow-hidden rounded-2xl border border-border bg-black/20">
-                  {isVideo ? (
-                    <video src={previewUrl} controls className="aspect-[16/11] w-full object-cover" />
-                  ) : (
-                    <img src={previewUrl} alt="preview" className="aspect-[16/11] w-full object-cover" />
-                  )}
-                </div>
-                <div className="flex flex-col justify-between rounded-2xl border border-white/8 bg-background/80 p-4">
-                  <div>
-                    <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                      {isVideo ? <Video className="h-3.5 w-3.5" /> : <ImagePlus className="h-3.5 w-3.5" />}
-                      {isVideo ? '동영상' : '사진'}
+          {mode === 'upload' ? (
+            <label className="block cursor-pointer rounded-3xl border border-dashed border-primary/30 bg-gradient-to-br from-primary/8 via-background to-emerald-500/10 p-5 transition-colors hover:border-primary/50">
+              <input
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={(e) => {
+                  const nextFile = e.target.files?.[0] ?? null
+                  setFile(nextFile)
+                  setError('')
+                }}
+              />
+
+              {previewUrl ? (
+                <div className="grid gap-4 md:grid-cols-[1.1fr,0.9fr]">
+                  <div className="overflow-hidden rounded-2xl border border-border bg-black/20">
+                    {isVideo ? (
+                      <video src={previewUrl} controls className="aspect-[16/11] w-full object-cover" />
+                    ) : (
+                      <img src={previewUrl} alt="preview" className="aspect-[16/11] w-full object-cover" />
+                    )}
+                  </div>
+                  <div className="flex flex-col justify-between rounded-2xl border border-white/8 bg-background/80 p-4">
+                    <div>
+                      <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                        {isVideo ? <Video className="h-3.5 w-3.5" /> : <ImagePlus className="h-3.5 w-3.5" />}
+                        {isVideo ? '동영상' : '사진'}
+                      </div>
+                      <p className="truncate text-sm font-medium">{file?.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {file ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : ''}
+                      </p>
                     </div>
-                    <p className="truncate text-sm font-medium">{file?.name}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {file ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : ''}
-                    </p>
-                  </div>
-                  <div className="mt-3 text-xs text-muted-foreground">
-                    파일을 다시 선택하면 현재 미리보기가 교체됩니다.
+                    <div className="mt-3 text-xs text-muted-foreground">
+                      파일을 다시 선택하면 현재 미리보기가 교체됩니다.
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-                <div className="rounded-2xl bg-primary/10 p-4 text-primary">
-                  <UploadCloud className="h-8 w-8" />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+                  <div className="rounded-2xl bg-primary/10 p-4 text-primary">
+                    <UploadCloud className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <div className="font-medium">사진 또는 동영상 선택</div>
+                    <p className="mt-1 text-sm text-muted-foreground">JPG, PNG, WEBP, GIF, MP4, MOV, WEBM 지원</p>
+                  </div>
                 </div>
-                <div>
-                  <div className="font-medium">사진 또는 동영상 선택</div>
-                  <p className="mt-1 text-sm text-muted-foreground">JPG, PNG, WEBP, GIF, MP4, MOV, WEBM 지원</p>
+              )}
+            </label>
+          ) : (
+            <div className="space-y-4 rounded-3xl border border-primary/20 bg-gradient-to-br from-red-500/8 via-background to-primary/10 p-5">
+              <div>
+                <label className="mb-1 block text-sm font-medium">유튜브 / 쇼츠 링크</label>
+                <div className="relative">
+                  <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="url"
+                    value={youtubeUrl}
+                    onChange={(e) => {
+                      setYoutubeUrl(e.target.value)
+                      setError('')
+                    }}
+                    placeholder="https://www.youtube.com/shorts/..."
+                    className="w-full rounded-xl border border-input bg-background pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  />
                 </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  `youtube.com/watch`, `youtube.com/shorts`, `youtu.be` 링크를 지원합니다.
+                </p>
               </div>
-            )}
-          </label>
+
+              {parsedYoutube ? (
+                <div className="grid gap-4 md:grid-cols-[1.1fr,0.9fr]">
+                  <div className="overflow-hidden rounded-2xl border border-border bg-black/20">
+                    <img src={parsedYoutube.thumbnailUrl} alt="youtube thumbnail" className="aspect-[16/11] w-full object-cover" />
+                  </div>
+                  <div className="flex flex-col justify-between rounded-2xl border border-white/8 bg-background/80 p-4">
+                    <div>
+                      <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-500">
+                        <Video className="h-3.5 w-3.5" />
+                        YouTube
+                      </div>
+                      <p className="text-sm font-medium">유튜브 링크가 정상적으로 인식되었습니다.</p>
+                      <p className="mt-1 break-all text-xs text-muted-foreground">{parsedYoutube.externalUrl}</p>
+                    </div>
+                    <div className="mt-3 text-xs text-muted-foreground">
+                      저장하면 갤러리에서 썸네일과 함께 카드로 보이고, 클릭 시 플레이어가 열립니다.
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                  링크를 넣으면 유튜브 썸네일과 플레이어 미리보기 정보가 준비됩니다.
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-4 md:grid-cols-[1fr,1fr]">
             <div>
