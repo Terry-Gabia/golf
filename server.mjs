@@ -15,6 +15,7 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${port}`
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const KMA_API_KEY = process.env.KMA_API_KEY
+const VWORLD_API_KEY = process.env.VWORLD_API_KEY || process.env.VWORLD_KEY
 
 let golfCourseCatalogPromise = null
 const resolvedCourseCoordsCache = new Map()
@@ -357,7 +358,46 @@ async function handleWeatherCourses(res) {
   jsonResponse(res, { regions, courses })
 }
 
-async function geocodeQuery(query) {
+async function geocodeWithVWorld(address) {
+  if (!VWORLD_API_KEY) return null
+
+  for (const type of ['ROAD', 'PARCEL']) {
+    const geocodeUrl = new URL('https://api.vworld.kr/req/address')
+    geocodeUrl.searchParams.set('service', 'address')
+    geocodeUrl.searchParams.set('request', 'getcoord')
+    geocodeUrl.searchParams.set('version', '2.0')
+    geocodeUrl.searchParams.set('crs', 'epsg:4326')
+    geocodeUrl.searchParams.set('format', 'json')
+    geocodeUrl.searchParams.set('type', type)
+    geocodeUrl.searchParams.set('refine', 'true')
+    geocodeUrl.searchParams.set('simple', 'false')
+    geocodeUrl.searchParams.set('address', address)
+    geocodeUrl.searchParams.set('key', VWORLD_API_KEY)
+
+    const response = await fetch(geocodeUrl, {
+      headers: {
+        'User-Agent': 'PeterParGolf/1.0 (+https://peterpar.up.railway.app)',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`VWorld Geocode API 호출 실패 (${response.status})`)
+    }
+
+    const data = await response.json()
+    const point = data?.response?.result?.point
+    const lat = parseCatalogCoordinate(point?.y)
+    const lng = parseCatalogCoordinate(point?.x)
+
+    if (lat != null && lng != null) {
+      return { lat, lng }
+    }
+  }
+
+  return null
+}
+
+async function geocodeWithNominatim(query) {
   const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=kr&q=${encodeURIComponent(query)}`
   const response = await fetch(geocodeUrl, {
     headers: {
@@ -378,6 +418,19 @@ async function geocodeQuery(query) {
     lat: Number.parseFloat(first.lat),
     lng: Number.parseFloat(first.lon),
   }
+}
+
+async function geocodeQuery(query, options = {}) {
+  if (options.addressOnly) {
+    try {
+      const coords = await geocodeWithVWorld(query)
+      if (coords) return coords
+    } catch (error) {
+      console.error('VWorld geocode error:', query, error)
+    }
+  }
+
+  return geocodeWithNominatim(query)
 }
 
 async function resolveCourseCoords(ccName) {
@@ -409,13 +462,14 @@ async function resolveCourseCoords(ccName) {
   }
 
   const geocodeQueries = [
-    `${matchedCourse.name} ${matchedCourse.address}, 대한민국`,
-    `${matchedCourse.address}, 대한민국`,
+    { query: matchedCourse.address, addressOnly: true },
+    { query: `${matchedCourse.name} ${matchedCourse.address}, 대한민국`, addressOnly: false },
+    { query: `${matchedCourse.address}, 대한민국`, addressOnly: false },
   ]
 
-  for (const query of geocodeQueries) {
+  for (const { query, addressOnly } of geocodeQueries) {
     try {
-      const coords = await geocodeQuery(query)
+      const coords = await geocodeQuery(query, { addressOnly })
       if (coords) {
         resolvedCourseCoordsCache.set(matchedCourse.normalizedName, coords)
         return coords
