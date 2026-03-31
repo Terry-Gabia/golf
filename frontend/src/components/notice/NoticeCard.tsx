@@ -1,6 +1,8 @@
-import { Calendar, Clock, MapPin, Users, Pencil, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { Calendar, Clock, MapPin, Users, Pencil, Trash2, CloudSun } from 'lucide-react'
 import { PLAY_TYPE_COLORS } from '@/types'
 import type { Notice } from '@/types'
+import { WeatherDialog } from './WeatherDialog'
 
 interface Props {
   notice: Notice
@@ -18,6 +20,7 @@ export function NoticeCard({ notice, currentUserId, onEdit, onDelete, onJoin, on
   const isJoined = participants.some((p) => p.user_id === currentUserId)
   const isFull = participants.length >= notice.max_members
   const isPast = new Date(notice.play_date) < new Date(new Date().toISOString().split('T')[0])
+  const [showWeather, setShowWeather] = useState(false)
 
   return (
     <div className={`rounded-xl border border-border bg-card p-4 transition-colors ${isPast ? 'opacity-60' : 'hover:border-primary/30'}`}>
@@ -42,10 +45,19 @@ export function NoticeCard({ notice, currentUserId, onEdit, onDelete, onJoin, on
               </span>
             )}
             {notice.cc_name && (
-              <span className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowWeather(true)
+                }}
+                className="flex items-center gap-1 rounded-md px-1 -mx-1 hover:bg-primary/10 hover:text-primary transition-colors"
+                title="날씨 보기"
+              >
                 <MapPin className="h-3.5 w-3.5" />
-                {notice.cc_name}
-              </span>
+                <span className="underline decoration-dotted underline-offset-2">{notice.cc_name}</span>
+                <CloudSun className="h-3 w-3 opacity-50" />
+              </button>
             )}
             <span className="flex items-center gap-1">
               <Users className="h-3.5 w-3.5" />
@@ -106,6 +118,9 @@ export function NoticeCard({ notice, currentUserId, onEdit, onDelete, onJoin, on
           )}
         </div>
       </div>
+      {showWeather && notice.cc_name && (
+        <WeatherDialog ccName={notice.cc_name} onClose={() => setShowWeather(false)} />
+      )}
     </div>
   )
 }
