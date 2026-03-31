@@ -7,6 +7,7 @@ import { Header } from '@/components/layout/Header'
 import { AuthForm } from '@/components/auth/AuthForm'
 import { ScorecardList } from '@/components/golf/ScorecardList'
 import { NoticeList } from '@/components/notice/NoticeList'
+import { WeatherTab } from '@/components/weather/WeatherTab'
 
 export default function App() {
   const { user, loading: authLoading, signUp, signIn, signInWithGoogle, signOut } = useAuth()
@@ -69,6 +70,7 @@ export default function App() {
             onLeave={leaveNotice}
           />
         )}
+        {activeTab === 'weather' && <WeatherTab />}
       </main>
     </div>
   )

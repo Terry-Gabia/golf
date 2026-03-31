@@ -16,6 +16,7 @@ export function Header({ user, theme, onToggleTheme, onSignOut, activeTab, onTab
   const tabs = [
     { id: 'scorecards', label: '스코어카드' },
     { id: 'notices', label: '일정 공지' },
+    { id: 'weather', label: '날씨' },
   ]
 
   return (

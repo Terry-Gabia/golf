@@ -201,6 +201,10 @@ const GOLF_COURSE_COORDS = {
   '이천': { lat: 37.2720, lng: 127.4350 },
   '여주': { lat: 37.2840, lng: 127.6360 },
   '리베라CC': { lat: 37.3160, lng: 127.2580 },
+  '블루언CC': { lat: 37.2200, lng: 127.2900 },
+  '용인블루언': { lat: 37.2200, lng: 127.2900 },
+  '용인 블루언 CC': { lat: 37.2200, lng: 127.2900 },
+  '블루언': { lat: 37.2200, lng: 127.2900 },
 }
 
 function findCourseCoords(ccName) {
@@ -224,6 +228,131 @@ function getBaseDateTime() {
 }
 
 const PTY_MAP = { 0: '없음', 1: '비', 2: '비/눈', 3: '눈', 5: '빗방울', 6: '빗방울눈날림', 7: '눈날림' }
+
+// 단기예보 기준 시각 계산 (발표: 0200,0500,0800,1100,1400,1700,2000,2300)
+function getFcstBaseDateTime() {
+  const FCST_TIMES = [2, 5, 8, 11, 14, 17, 20, 23]
+  const now = new Date()
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
+  let hour = kst.getUTCHours()
+  const min = kst.getUTCMinutes()
+  // 발표 후 약 10분 뒤 API 제공, 여유있게 처리
+  if (min < 10) hour--
+  // 가장 가까운 이전 발표 시각 찾기
+  let baseHour = FCST_TIMES[0]
+  for (const t of FCST_TIMES) {
+    if (t <= hour) baseHour = t
+  }
+  // 0시~1시인 경우 전날 2300 사용
+  if (hour < 2) {
+    baseHour = 23
+    kst.setUTCDate(kst.getUTCDate() - 1)
+  }
+  const baseDate = `${kst.getUTCFullYear()}${String(kst.getUTCMonth() + 1).padStart(2, '0')}${String(kst.getUTCDate()).padStart(2, '0')}`
+  const baseTime = `${String(baseHour).padStart(2, '0')}00`
+  return { baseDate, baseTime }
+}
+
+const SKY_MAP = { 1: '맑음', 3: '구름많음', 4: '흐림' }
+
+async function handleForecast(url, res) {
+  const ccName = url.searchParams.get('ccName')
+  const lat = url.searchParams.get('lat')
+  const lng = url.searchParams.get('lng')
+
+  if (!ccName && (!lat || !lng)) {
+    jsonResponse(res, { error: '골프장명(ccName) 또는 좌표(lat, lng)가 필요합니다.' }, 400)
+    return
+  }
+  if (!KMA_API_KEY) {
+    jsonResponse(res, { error: '기상청 API 키가 설정되지 않았습니다.' }, 500)
+    return
+  }
+
+  try {
+    let latitude, longitude, address
+    if (lat && lng) {
+      latitude = parseFloat(lat); longitude = parseFloat(lng)
+      address = ccName || `${lat}, ${lng}`
+    } else {
+      const coords = findCourseCoords(ccName)
+      if (!coords) {
+        jsonResponse(res, { error: `"${ccName}" 골프장 좌표를 찾을 수 없습니다.` }, 404)
+        return
+      }
+      latitude = coords.lat; longitude = coords.lng; address = ccName
+    }
+
+    const { nx, ny } = latLngToGrid(latitude, longitude)
+    const { baseDate, baseTime } = getFcstBaseDateTime()
+
+    const apiUrl = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${encodeURIComponent(KMA_API_KEY)}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`
+    const kmaRes = await fetch(apiUrl)
+    const kmaText = await kmaRes.text()
+
+    if (!kmaRes.ok || kmaText.startsWith('<') || kmaText === 'Unauthorized') {
+      console.error('KMA forecast error:', kmaRes.status, kmaText.substring(0, 200))
+      jsonResponse(res, { error: '기상청 API 호출에 실패했습니다.' }, 502)
+      return
+    }
+
+    let kmaData
+    try { kmaData = JSON.parse(kmaText) } catch {
+      jsonResponse(res, { error: '기상청 응답을 파싱할 수 없습니다.' }, 502)
+      return
+    }
+
+    const items = kmaData?.response?.body?.items?.item
+    if (!items || items.length === 0) {
+      jsonResponse(res, { error: '예보 데이터를 가져올 수 없습니다.', detail: kmaData?.response?.header }, 502)
+      return
+    }
+
+    // 날짜+시간별로 그룹핑
+    const byDateTime = {}
+    for (const item of items) {
+      const key = `${item.fcstDate}_${item.fcstTime}`
+      if (!byDateTime[key]) byDateTime[key] = { date: item.fcstDate, time: item.fcstTime }
+      byDateTime[key][item.category] = item.fcstValue
+    }
+
+    // 일별로 집계
+    const byDate = {}
+    for (const slot of Object.values(byDateTime)) {
+      const d = slot.date
+      if (!byDate[d]) byDate[d] = { date: d, minTemp: 999, maxTemp: -999, hours: [] }
+      const temp = parseFloat(slot.TMP || slot.T3H || 0)
+      if (temp < byDate[d].minTemp) byDate[d].minTemp = temp
+      if (temp > byDate[d].maxTemp) byDate[d].maxTemp = temp
+      // TMN/TMX가 있으면 사용
+      if (slot.TMN) byDate[d].minTemp = Math.min(byDate[d].minTemp, parseFloat(slot.TMN))
+      if (slot.TMX) byDate[d].maxTemp = Math.max(byDate[d].maxTemp, parseFloat(slot.TMX))
+      byDate[d].hours.push({
+        time: slot.time,
+        temp,
+        pop: parseInt(slot.POP || 0),
+        pty: parseInt(slot.PTY || 0),
+        ptyText: PTY_MAP[parseInt(slot.PTY || 0)] || '없음',
+        sky: parseInt(slot.SKY || 1),
+        skyText: SKY_MAP[parseInt(slot.SKY || 1)] || '맑음',
+        windSpeed: parseFloat(slot.WSD || 0),
+        humidity: parseInt(slot.REH || 0),
+      })
+    }
+
+    const days = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
+
+    jsonResponse(res, {
+      ccName: address,
+      location: { lat: latitude, lng: longitude, nx, ny },
+      baseDate, baseTime,
+      days,
+    })
+  } catch (err) {
+    console.error('Forecast API error:', err)
+    jsonResponse(res, { error: '예보 조회 중 오류가 발생했습니다.' }, 500)
+  }
+}
 
 async function handleWeather(url, res) {
   const ccName = url.searchParams.get('ccName')
@@ -338,6 +467,11 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === '/api/weather') {
     await handleWeather(url, res)
+    return
+  }
+
+  if (url.pathname === '/api/weather/forecast') {
+    await handleForecast(url, res)
     return
   }
 
