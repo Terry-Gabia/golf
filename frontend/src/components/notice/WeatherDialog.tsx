@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { X, Thermometer, Droplets, Wind, CloudRain, CloudSnow, CloudSun } from 'lucide-react'
+import { X, Thermometer, Droplets, Wind, CloudRain, CloudSnow, CloudSun, Cloud } from 'lucide-react'
 
-interface WeatherResponse {
+interface CurrentWeatherResponse {
   ccName: string
   location: { lat: number; lng: number; nx: number; ny: number }
   baseDate: string
@@ -18,8 +18,37 @@ interface WeatherResponse {
   }
 }
 
+interface ForecastHourData {
+  time: string
+  temp: number
+  pop: number
+  pty: number
+  ptyText: string
+  sky: number
+  skyText: string
+  windSpeed: number
+  humidity: number
+}
+
+interface ForecastDayData {
+  date: string
+  minTemp: number
+  maxTemp: number
+  hours: ForecastHourData[]
+}
+
+interface ForecastResponse {
+  ccName: string
+  location: { lat: number; lng: number; nx: number; ny: number }
+  baseDate: string
+  baseTime: string
+  days: ForecastDayData[]
+}
+
 interface Props {
   ccName: string
+  playDate: string
+  playTime?: string | null
   onClose: () => void
 }
 
@@ -33,6 +62,22 @@ function getWeatherIcon(precipType: number) {
     default:
       return { Icon: CloudSun, color: 'text-yellow-400', bg: 'from-amber-400/20 to-orange-400/10' }
   }
+}
+
+function getForecastIcon(sky: number, precipType: number) {
+  if (precipType === 1 || precipType === 2 || precipType === 5 || precipType === 6) {
+    return { Icon: CloudRain, color: 'text-blue-400', bg: 'from-blue-500/20 to-blue-600/10' }
+  }
+  if (precipType === 3 || precipType === 7) {
+    return { Icon: CloudSnow, color: 'text-sky-300', bg: 'from-sky-400/20 to-sky-500/10' }
+  }
+  if (sky === 1) {
+    return { Icon: CloudSun, color: 'text-yellow-400', bg: 'from-amber-400/20 to-orange-400/10' }
+  }
+  if (sky === 3) {
+    return { Icon: CloudSun, color: 'text-orange-300', bg: 'from-orange-400/20 to-amber-500/10' }
+  }
+  return { Icon: Cloud, color: 'text-slate-400', bg: 'from-slate-400/20 to-slate-500/10' }
 }
 
 // 풍속 체감 레벨
@@ -53,10 +98,43 @@ function getWindDirection(ew: number, ns: number): string {
   return dirs[idx] + '풍'
 }
 
-export function WeatherDialog({ ccName, onClose }: Props) {
-  const [data, setData] = useState<WeatherResponse | null>(null)
+function toKmaDate(date: string) {
+  return date.replace(/-/g, '')
+}
+
+function formatPlayDate(date: string) {
+  const [year, month, day] = date.split('-').map(Number)
+  const target = new Date(year, month - 1, day)
+  const dayNames = ['일', '월', '화', '수', '목', '금', '토']
+  return `${month}/${day} (${dayNames[target.getDay()]})`
+}
+
+function getFocusHour(day: ForecastDayData, playTime?: string | null) {
+  const targetHour = playTime ? parseInt(playTime.slice(0, 2), 10) : 12
+  const candidates = day.hours.filter((hour) => {
+    const value = parseInt(hour.time.slice(0, 2), 10)
+    return value >= 7 && value <= 19
+  })
+  const pool = candidates.length > 0 ? candidates : day.hours
+
+  return pool.reduce((closest, hour) => {
+    const closestDiff = Math.abs(parseInt(closest.time.slice(0, 2), 10) - targetHour)
+    const hourDiff = Math.abs(parseInt(hour.time.slice(0, 2), 10) - targetHour)
+    return hourDiff < closestDiff ? hour : closest
+  }, pool[0])
+}
+
+export function WeatherDialog({ ccName, playDate, playTime, onClose }: Props) {
+  const [currentData, setCurrentData] = useState<CurrentWeatherResponse | null>(null)
+  const [forecastData, setForecastData] = useState<{
+    source: ForecastResponse
+    day: ForecastDayData
+    focusHour: ForecastHourData
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const today = new Date().toISOString().split('T')[0]
+  const isPast = playDate < today
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -71,12 +149,37 @@ export function WeatherDialog({ ccName, onClose }: Props) {
       try {
         setLoading(true)
         setError('')
-        const res = await fetch(`/api/weather?ccName=${encodeURIComponent(ccName)}`)
+        setCurrentData(null)
+        setForecastData(null)
+
+        if (isPast) {
+          const res = await fetch(`/api/weather?ccName=${encodeURIComponent(ccName)}`)
+          if (!res.ok) {
+            const errData = await res.json()
+            throw new Error(errData.error || '날씨 정보를 가져올 수 없습니다.')
+          }
+          setCurrentData(await res.json())
+          return
+        }
+
+        const res = await fetch(`/api/weather/forecast?ccName=${encodeURIComponent(ccName)}`)
         if (!res.ok) {
-          const errData = await res.json()
+          const errData = await res.json().catch(() => ({ error: '날씨 정보를 가져올 수 없습니다.' }))
           throw new Error(errData.error || '날씨 정보를 가져올 수 없습니다.')
         }
-        setData(await res.json())
+
+        const forecast = (await res.json()) as ForecastResponse
+        const day = forecast.days.find((item) => item.date === toKmaDate(playDate))
+
+        if (!day) {
+          throw new Error('예약일 예보는 아직 제공되지 않습니다. 최신 단기예보 범위 내에서 다시 확인해주세요.')
+        }
+
+        setForecastData({
+          source: forecast,
+          day,
+          focusHour: getFocusHour(day, playTime),
+        })
       } catch (err) {
         setError(err instanceof Error ? err.message : '알 수 없는 오류')
       } finally {
@@ -84,10 +187,17 @@ export function WeatherDialog({ ccName, onClose }: Props) {
       }
     }
     fetchWeather()
-  }, [ccName])
+  }, [ccName, isPast, playDate, playTime])
 
-  const w = data?.weather
-  const { Icon: WeatherIcon, color: iconColor, bg: gradBg } = getWeatherIcon(w?.precipType ?? 0)
+  const currentWeather = currentData?.weather
+  const forecastDay = forecastData?.day
+  const forecastHour = forecastData?.focusHour
+  const currentIcon = getWeatherIcon(currentWeather?.precipType ?? 0)
+  const forecastIcon = getForecastIcon(forecastHour?.sky ?? 1, forecastHour?.pty ?? 0)
+  const maxPop = forecastDay ? Math.max(...forecastDay.hours.map((hour) => hour.pop)) : 0
+  const forecastSummary = forecastHour
+    ? (forecastHour.pty > 0 ? forecastHour.ptyText : forecastHour.skyText)
+    : ''
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
@@ -117,10 +227,10 @@ export function WeatherDialog({ ccName, onClose }: Props) {
         )}
 
         {/* 날씨 데이터 */}
-        {data && w && !loading && (
+        {currentData && currentWeather && !loading && (
           <>
             {/* 상단: 날씨 아이콘 + 기온 + 골프장명 */}
-            <div className={`relative rounded-t-2xl bg-gradient-to-br ${gradBg} p-5`}>
+            <div className={`relative rounded-t-2xl bg-gradient-to-br ${currentIcon.bg} p-5`}>
               <button
                 onClick={onClose}
                 className="absolute right-3 top-3 rounded-lg p-1 text-muted-foreground hover:bg-black/10"
@@ -128,21 +238,21 @@ export function WeatherDialog({ ccName, onClose }: Props) {
                 <X className="h-4 w-4" />
               </button>
               <div className="flex items-center gap-4">
-                <WeatherIcon className={`h-14 w-14 ${iconColor}`} />
+                <currentIcon.Icon className={`h-14 w-14 ${currentIcon.color}`} />
                 <div>
                   <div className="text-4xl font-bold tracking-tight">
-                    {Math.round(w.temperature)}
+                    {Math.round(currentWeather.temperature)}
                     <span className="text-lg font-normal text-muted-foreground">°C</span>
                   </div>
                   <div className="mt-0.5 text-sm font-medium text-muted-foreground">
-                    {w.precipTypeText === '없음' ? '맑음' : w.precipTypeText}
+                    {currentWeather.precipTypeText === '없음' ? '맑음' : currentWeather.precipTypeText}
                   </div>
                 </div>
               </div>
-              <p className="mt-3 text-xs text-muted-foreground">
-                {data.ccName} &middot; {data.baseDate.slice(4, 6)}/{data.baseDate.slice(6)}
-                {' '}{data.baseTime.slice(0, 2)}:00 기준
-              </p>
+              <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                <p>{currentData.ccName} &middot; 지난 일정이라 현재 날씨로 안내합니다.</p>
+                <p>{currentData.baseDate.slice(4, 6)}/{currentData.baseDate.slice(6)} {currentData.baseTime.slice(0, 2)}:00 기준</p>
+              </div>
             </div>
 
             {/* 하단: 상세 정보 */}
@@ -151,7 +261,7 @@ export function WeatherDialog({ ccName, onClose }: Props) {
                 <Droplets className="h-4 w-4 shrink-0 text-blue-400" />
                 <div>
                   <div className="text-[11px] text-muted-foreground">습도</div>
-                  <div className="text-sm font-semibold">{w.humidity}%</div>
+                  <div className="text-sm font-semibold">{currentWeather.humidity}%</div>
                 </div>
               </div>
               <div className="flex items-center gap-2.5 bg-card p-3.5">
@@ -159,9 +269,9 @@ export function WeatherDialog({ ccName, onClose }: Props) {
                 <div>
                   <div className="text-[11px] text-muted-foreground">바람</div>
                   <div className="text-sm font-semibold">
-                    {w.windSpeed}m/s
+                    {currentWeather.windSpeed}m/s
                     <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                      {getWindLabel(w.windSpeed)}
+                      {getWindLabel(currentWeather.windSpeed)}
                     </span>
                   </div>
                 </div>
@@ -171,7 +281,7 @@ export function WeatherDialog({ ccName, onClose }: Props) {
                 <div>
                   <div className="text-[11px] text-muted-foreground">강수량</div>
                   <div className="text-sm font-semibold">
-                    {w.rainfall > 0 ? `${w.rainfall}mm` : '-'}
+                    {currentWeather.rainfall > 0 ? `${currentWeather.rainfall}mm` : '-'}
                   </div>
                 </div>
               </div>
@@ -180,7 +290,7 @@ export function WeatherDialog({ ccName, onClose }: Props) {
                 <div>
                   <div className="text-[11px] text-muted-foreground">풍향</div>
                   <div className="text-sm font-semibold">
-                    {getWindDirection(w.windEW, w.windNS) || '-'}
+                    {getWindDirection(currentWeather.windEW, currentWeather.windNS) || '-'}
                   </div>
                 </div>
               </div>
@@ -188,7 +298,81 @@ export function WeatherDialog({ ccName, onClose }: Props) {
 
             {/* 골프 적합도 한줄 코멘트 */}
             <div className="rounded-b-2xl border-t border-border bg-muted/30 px-4 py-3 text-center text-xs text-muted-foreground">
-              {getGolfComment(w.temperature, w.windSpeed, w.precipType, w.rainfall)}
+              {getGolfComment(currentWeather.temperature, currentWeather.windSpeed, currentWeather.precipType, currentWeather.rainfall)}
+            </div>
+          </>
+        )}
+
+        {forecastData && forecastDay && forecastHour && !loading && (
+          <>
+            <div className={`relative rounded-t-2xl bg-gradient-to-br ${forecastIcon.bg} p-5`}>
+              <button
+                onClick={onClose}
+                className="absolute right-3 top-3 rounded-lg p-1 text-muted-foreground hover:bg-black/10"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <div className="flex items-center gap-4">
+                <forecastIcon.Icon className={`h-14 w-14 ${forecastIcon.color}`} />
+                <div>
+                  <div className="text-4xl font-bold tracking-tight">
+                    {Math.round(forecastHour.temp)}
+                    <span className="text-lg font-normal text-muted-foreground">°C</span>
+                  </div>
+                  <div className="mt-0.5 text-sm font-medium text-muted-foreground">
+                    {forecastSummary}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                <p>{forecastData.source.ccName} &middot; {formatPlayDate(playDate)} 예약일 예보</p>
+                <p>
+                  {playTime ? `${playTime} 기준 인접 시간대` : `${forecastHour.time.slice(0, 2)}:00 대표 예보`} ·
+                  {' '}발표 {forecastData.source.baseDate.slice(4, 6)}/{forecastData.source.baseDate.slice(6)} {forecastData.source.baseTime.slice(0, 2)}:00
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-px bg-border">
+              <div className="flex items-center gap-2.5 bg-card p-3.5">
+                <Thermometer className="h-4 w-4 shrink-0 text-orange-400" />
+                <div>
+                  <div className="text-[11px] text-muted-foreground">최저/최고</div>
+                  <div className="text-sm font-semibold">
+                    {Math.round(forecastDay.minTemp)}° / {Math.round(forecastDay.maxTemp)}°
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5 bg-card p-3.5">
+                <Droplets className="h-4 w-4 shrink-0 text-blue-400" />
+                <div>
+                  <div className="text-[11px] text-muted-foreground">강수확률</div>
+                  <div className="text-sm font-semibold">{maxPop}%</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5 bg-card p-3.5">
+                <Wind className="h-4 w-4 shrink-0 text-teal-400" />
+                <div>
+                  <div className="text-[11px] text-muted-foreground">바람</div>
+                  <div className="text-sm font-semibold">
+                    {forecastHour.windSpeed}m/s
+                    <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                      {getWindLabel(forecastHour.windSpeed)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5 bg-card p-3.5">
+                <CloudRain className="h-4 w-4 shrink-0 text-indigo-400" />
+                <div>
+                  <div className="text-[11px] text-muted-foreground">습도</div>
+                  <div className="text-sm font-semibold">{forecastHour.humidity}%</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-b-2xl border-t border-border bg-muted/30 px-4 py-3 text-center text-xs text-muted-foreground">
+              {getForecastGolfComment(forecastDay, forecastHour)}
             </div>
           </>
         )}
@@ -204,4 +388,14 @@ function getGolfComment(temp: number, wind: number, precipType: number, rainfall
   if (temp > 33) return '폭염 주의! 수분 섭취 잊지 마세요.'
   if (temp >= 15 && temp <= 25 && wind < 6) return '골프 치기 딱 좋은 날씨예요!'
   return '즐거운 라운딩 되세요!'
+}
+
+function getForecastGolfComment(day: ForecastDayData, hour: ForecastHourData): string {
+  const maxPop = Math.max(...day.hours.map((item) => item.pop))
+  if (hour.pty > 0 || maxPop >= 60) return '예약일 비 가능성이 있습니다. 우천 대비를 권장합니다.'
+  if (hour.windSpeed >= 10) return '예약 시간대 바람이 강할 수 있습니다. 클럽 선택에 유의하세요.'
+  if (day.minTemp < 5) return '예약일 아침 기온이 낮습니다. 방한 준비가 필요합니다.'
+  if (day.maxTemp > 30) return '예약일 낮 기온이 높을 수 있습니다. 수분 보충을 준비하세요.'
+  if (day.minTemp >= 10 && day.maxTemp <= 25 && hour.windSpeed < 6) return '예약일 컨디션이 무난합니다. 라운딩하기 좋은 편입니다.'
+  return '예약일 예보 기준으로 무난한 컨디션입니다.'
 }

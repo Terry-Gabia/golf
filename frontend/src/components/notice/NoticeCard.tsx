@@ -119,7 +119,12 @@ export function NoticeCard({ notice, currentUserId, onEdit, onDelete, onJoin, on
         </div>
       </div>
       {showWeather && notice.cc_name && (
-        <WeatherDialog ccName={notice.cc_name} onClose={() => setShowWeather(false)} />
+        <WeatherDialog
+          ccName={notice.cc_name}
+          playDate={notice.play_date}
+          playTime={notice.play_time}
+          onClose={() => setShowWeather(false)}
+        />
       )}
     </div>
   )
