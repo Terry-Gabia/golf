@@ -17,6 +17,7 @@ export function Header({ user, theme, onToggleTheme, onSignOut, activeTab, onTab
     { id: 'scorecards', label: '스코어카드' },
     { id: 'notices', label: '일정 공지' },
     { id: 'weather', label: '날씨' },
+    { id: 'gallery', label: '갤러리' },
   ]
 
   return (
@@ -25,7 +26,7 @@ export function Header({ user, theme, onToggleTheme, onSignOut, activeTab, onTab
         <div className="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-6">
           <h1 className="truncate text-lg font-bold text-primary sm:text-xl">⛳ 피터파의 샷점검</h1>
           {user && (
-            <nav className="grid w-full grid-cols-3 gap-1 sm:flex sm:w-auto">
+            <nav className="grid w-full grid-cols-4 gap-1 sm:flex sm:w-auto">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}

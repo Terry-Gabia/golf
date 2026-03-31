@@ -3,17 +3,20 @@ import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
 import { useGolfRounds } from '@/hooks/useGolfRounds'
 import { useNotices } from '@/hooks/useNotices'
+import { useGallery } from '@/hooks/useGallery'
 import { Header } from '@/components/layout/Header'
 import { AuthForm } from '@/components/auth/AuthForm'
 import { ScorecardList } from '@/components/golf/ScorecardList'
 import { NoticeList } from '@/components/notice/NoticeList'
 import { WeatherTab } from '@/components/weather/WeatherTab'
+import { GalleryTab } from '@/components/gallery/GalleryTab'
 
 export default function App() {
   const { user, loading: authLoading, signUp, signIn, signInWithGoogle, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme(user?.id ?? null)
   const { rounds, loading: roundsLoading, addRound, updateRound, deleteRound } = useGolfRounds(user?.id ?? null)
   const { notices, loading: noticesLoading, addNotice, updateNotice, deleteNotice, joinNotice, leaveNotice } = useNotices(user?.id ?? null)
+  const { items: galleryItems, loading: galleryLoading, uploadItem, deleteItem } = useGallery(user?.id ?? null, user?.email ?? null)
   const [activeTab, setActiveTab] = useState('scorecards')
 
   if (authLoading) {
@@ -71,6 +74,15 @@ export default function App() {
           />
         )}
         {activeTab === 'weather' && <WeatherTab />}
+        {activeTab === 'gallery' && (
+          <GalleryTab
+            items={galleryItems}
+            loading={galleryLoading}
+            currentUserId={user.id}
+            onUpload={uploadItem}
+            onDelete={deleteItem}
+          />
+        )}
       </main>
     </div>
   )

@@ -1,6 +1,7 @@
 export type PlayType = '필드' | '파3' | '스크린'
 export type Theme = 'light' | 'dark'
 export type RoundVisibility = 'public' | 'private'
+export type GalleryMediaType = 'image' | 'video'
 
 export interface GolfRecord {
   id: string
@@ -69,6 +70,19 @@ export interface UserProfile {
   display_name: string | null
   theme: Theme
   slack_user_id: string | null
+}
+
+export interface GalleryItem {
+  id: string
+  user_id: string
+  uploader_name: string
+  title: string | null
+  description: string | null
+  media_type: GalleryMediaType
+  bucket_name: string
+  file_path: string
+  public_url: string
+  created_at: string
 }
 
 export const PLAY_TYPES: PlayType[] = ['필드', '파3', '스크린']
