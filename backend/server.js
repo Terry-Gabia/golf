@@ -224,7 +224,21 @@ app.get('/api/weather', async (req, res) => {
 
     const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${encodeURIComponent(KMA_API_KEY)}&pageNo=1&numOfRows=10&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`
     const kmaRes = await fetch(url)
-    const kmaData = await kmaRes.json()
+    const kmaText = await kmaRes.text()
+
+    // 기상청 API가 인증 실패 등에서 HTML을 반환할 수 있음
+    if (!kmaRes.ok || kmaText.startsWith('<') || kmaText === 'Unauthorized') {
+      console.error('KMA API error:', kmaRes.status, kmaText.substring(0, 200))
+      return res.status(502).json({ error: '기상청 API 호출에 실패했습니다.', status: kmaRes.status })
+    }
+
+    let kmaData
+    try {
+      kmaData = JSON.parse(kmaText)
+    } catch {
+      console.error('KMA API parse error:', kmaText.substring(0, 200))
+      return res.status(502).json({ error: '기상청 응답을 파싱할 수 없습니다.' })
+    }
 
     const items = kmaData?.response?.body?.items?.item
     if (!items || items.length === 0) {
