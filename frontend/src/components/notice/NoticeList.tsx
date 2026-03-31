@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, CloudSun } from 'lucide-react'
 import { NoticeCard } from './NoticeCard'
 import { NoticeForm } from './NoticeForm'
 import { JoinNoticeDialog } from './JoinNoticeDialog'
@@ -53,6 +53,11 @@ export function NoticeList({ notices, loading, currentUserId, onAdd, onUpdate, o
           새 공지
         </button>
       </div>
+
+      <p className="mb-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <CloudSun className="h-3.5 w-3.5" />
+        장소명을 누르면 현재 날씨를 확인할 수 있어요
+      </p>
 
       {loading ? (
         <div className="py-20 text-center text-muted-foreground">불러오는 중...</div>
