@@ -13,6 +13,7 @@ const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET
 const BASE_URL = process.env.BASE_URL || `http://localhost:${port}`
 const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const KMA_API_KEY = process.env.KMA_API_KEY
 
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -161,6 +162,150 @@ async function handleNaverCallback(url, res) {
   }
 }
 
+// ========== 기상청 날씨 API ==========
+
+function latLngToGrid(lat, lng) {
+  const RE = 6371.00877, GRID = 5.0, SLAT1 = 30.0, SLAT2 = 60.0
+  const OLON = 126.0, OLAT = 38.0, XO = 43, YO = 136
+  const DEGRAD = Math.PI / 180.0
+  const re = RE / GRID
+  const slat1 = SLAT1 * DEGRAD, slat2 = SLAT2 * DEGRAD
+  const olon = OLON * DEGRAD, olat = OLAT * DEGRAD
+  let sn = Math.tan(Math.PI * 0.25 + slat2 * 0.5) / Math.tan(Math.PI * 0.25 + slat1 * 0.5)
+  sn = Math.log(Math.cos(slat1) / Math.cos(slat2)) / Math.log(sn)
+  let sf = Math.tan(Math.PI * 0.25 + slat1 * 0.5)
+  sf = (Math.pow(sf, sn) * Math.cos(slat1)) / sn
+  let ro = Math.tan(Math.PI * 0.25 + olat * 0.5)
+  ro = (re * sf) / Math.pow(ro, sn)
+  let ra = Math.tan(Math.PI * 0.25 + lat * DEGRAD * 0.5)
+  ra = (re * sf) / Math.pow(ra, sn)
+  let theta = lng * DEGRAD - olon
+  if (theta > Math.PI) theta -= 2.0 * Math.PI
+  if (theta < -Math.PI) theta += 2.0 * Math.PI
+  theta *= sn
+  return { nx: Math.floor(ra * Math.sin(theta) + XO + 0.5), ny: Math.floor(ro - ra * Math.cos(theta) + YO + 0.5) }
+}
+
+const GOLF_COURSE_COORDS = {
+  '분당그린피아': { lat: 37.4023, lng: 127.1278 },
+  '그린피아': { lat: 37.4023, lng: 127.1278 },
+  '남서울CC': { lat: 37.3250, lng: 127.0800 },
+  '남서울': { lat: 37.3250, lng: 127.0800 },
+  '용인CC': { lat: 37.2340, lng: 127.2010 },
+  '수원CC': { lat: 37.2630, lng: 127.0280 },
+  '안양CC': { lat: 37.3820, lng: 126.9510 },
+  '군포CC': { lat: 37.3530, lng: 126.9340 },
+  '양지파인': { lat: 37.2280, lng: 127.2870 },
+  '곤지암': { lat: 37.3410, lng: 127.3350 },
+  '기흥CC': { lat: 37.2540, lng: 127.1040 },
+  '이천': { lat: 37.2720, lng: 127.4350 },
+  '여주': { lat: 37.2840, lng: 127.6360 },
+  '리베라CC': { lat: 37.3160, lng: 127.2580 },
+}
+
+function findCourseCoords(ccName) {
+  const name = ccName.trim()
+  if (GOLF_COURSE_COORDS[name]) return GOLF_COURSE_COORDS[name]
+  for (const [key, coords] of Object.entries(GOLF_COURSE_COORDS)) {
+    if (name.includes(key) || key.includes(name)) return coords
+  }
+  return null
+}
+
+function getBaseDateTime() {
+  const now = new Date()
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000)
+  let hour = kst.getUTCHours()
+  if (kst.getUTCMinutes() < 40) hour--
+  if (hour < 0) { hour = 23; kst.setUTCDate(kst.getUTCDate() - 1) }
+  const baseDate = `${kst.getUTCFullYear()}${String(kst.getUTCMonth() + 1).padStart(2, '0')}${String(kst.getUTCDate()).padStart(2, '0')}`
+  const baseTime = `${String(hour).padStart(2, '0')}00`
+  return { baseDate, baseTime }
+}
+
+const PTY_MAP = { 0: '없음', 1: '비', 2: '비/눈', 3: '눈', 5: '빗방울', 6: '빗방울눈날림', 7: '눈날림' }
+
+async function handleWeather(url, res) {
+  const ccName = url.searchParams.get('ccName')
+  const lat = url.searchParams.get('lat')
+  const lng = url.searchParams.get('lng')
+
+  if (!ccName && (!lat || !lng)) {
+    jsonResponse(res, { error: '골프장명(ccName) 또는 좌표(lat, lng)가 필요합니다.' }, 400)
+    return
+  }
+  if (!KMA_API_KEY) {
+    jsonResponse(res, { error: '기상청 API 키가 설정되지 않았습니다.' }, 500)
+    return
+  }
+
+  try {
+    let latitude, longitude, address
+    if (lat && lng) {
+      latitude = parseFloat(lat)
+      longitude = parseFloat(lng)
+      address = ccName || `${lat}, ${lng}`
+    } else {
+      const coords = findCourseCoords(ccName)
+      if (!coords) {
+        jsonResponse(res, { error: `"${ccName}" 골프장 좌표를 찾을 수 없습니다. 관리자에게 좌표 등록을 요청해주세요.` }, 404)
+        return
+      }
+      latitude = coords.lat
+      longitude = coords.lng
+      address = ccName
+    }
+
+    const { nx, ny } = latLngToGrid(latitude, longitude)
+    const { baseDate, baseTime } = getBaseDateTime()
+
+    const apiUrl = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${encodeURIComponent(KMA_API_KEY)}&pageNo=1&numOfRows=10&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`
+    const kmaRes = await fetch(apiUrl)
+    const kmaText = await kmaRes.text()
+
+    if (!kmaRes.ok || kmaText.startsWith('<') || kmaText === 'Unauthorized') {
+      console.error('KMA API error:', kmaRes.status, kmaText.substring(0, 200))
+      jsonResponse(res, { error: '기상청 API 호출에 실패했습니다.', status: kmaRes.status }, 502)
+      return
+    }
+
+    let kmaData
+    try { kmaData = JSON.parse(kmaText) } catch {
+      console.error('KMA API parse error:', kmaText.substring(0, 200))
+      jsonResponse(res, { error: '기상청 응답을 파싱할 수 없습니다.' }, 502)
+      return
+    }
+
+    const items = kmaData?.response?.body?.items?.item
+    if (!items || items.length === 0) {
+      jsonResponse(res, { error: '기상청에서 날씨 정보를 가져올 수 없습니다.', detail: kmaData?.response?.header }, 502)
+      return
+    }
+
+    const weather = {}
+    for (const item of items) weather[item.category] = item.obsrValue
+
+    jsonResponse(res, {
+      ccName: address,
+      location: { lat: latitude, lng: longitude, nx, ny },
+      baseDate, baseTime,
+      weather: {
+        temperature: parseFloat(weather.T1H || 0),
+        humidity: parseFloat(weather.REH || 0),
+        rainfall: parseFloat(weather.RN1 || 0),
+        precipType: parseInt(weather.PTY || 0),
+        precipTypeText: PTY_MAP[parseInt(weather.PTY || 0)] || '알 수 없음',
+        windSpeed: parseFloat(weather.WSD || 0),
+        windEW: parseFloat(weather.UUU || 0),
+        windNS: parseFloat(weather.VVV || 0),
+      },
+    })
+  } catch (err) {
+    console.error('Weather API error:', err)
+    jsonResponse(res, { error: '날씨 정보 조회 중 오류가 발생했습니다.' }, 500)
+  }
+}
+
 // ========== HTTP Server ==========
 const server = createServer(async (req, res) => {
   if (!req.url) {
@@ -188,6 +333,11 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === '/api/auth/naver/callback') {
     await handleNaverCallback(url, res)
+    return
+  }
+
+  if (url.pathname === '/api/weather') {
+    await handleWeather(url, res)
     return
   }
 
