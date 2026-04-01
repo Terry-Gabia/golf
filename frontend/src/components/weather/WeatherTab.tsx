@@ -128,7 +128,7 @@ function getScoreLabel(score: number) {
 }
 
 export function WeatherTab() {
-  const [courseName, setCourseName] = useState('블루언용인CC')
+  const [courseName, setCourseName] = useState('블루원용인CC')
   const [searchInput, setSearchInput] = useState('')
   const [showSearch, setShowSearch] = useState(false)
   const [courses, setCourses] = useState<CourseItem[]>([])
