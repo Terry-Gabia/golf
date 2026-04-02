@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { CalendarDays, Camera, Eye, Film, Images, MessageCircle, Plus, Trash2, User } from 'lucide-react'
+import { CalendarDays, Camera, Eye, Film, Images, Lock, MessageCircle, Plus, Trash2, Unlock, User } from 'lucide-react'
 import { GalleryUploadDialog } from './GalleryUploadDialog'
 import { GalleryViewerDialog } from './GalleryViewerDialog'
 import type { GalleryComment, GalleryItem } from '@/types'
+import { GALLERY_VISIBILITY_LABELS } from '@/types'
 
 interface Props {
   items: GalleryItem[]
@@ -10,8 +11,8 @@ interface Props {
   currentUserId: string
   onUpload: (
     data:
-      | { file: File; title: string | null; description: string | null }
-      | { youtubeUrl: string; title: string | null; description: string | null }
+      | { file: File; title: string | null; description: string | null; visibility: 'public' | 'private' }
+      | { youtubeUrl: string; title: string | null; description: string | null; visibility: 'public' | 'private' }
   ) => Promise<void>
   onDelete: (item: GalleryItem) => Promise<void>
   onFetchComments: (galleryItemId: string) => Promise<GalleryComment[]>
@@ -40,7 +41,7 @@ export function GalleryTab({
   onView,
 }: Props) {
   const [showUpload, setShowUpload] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null)
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
 
   const featured = items[0] ?? null
   const restItems = featured ? items.slice(1) : []
@@ -125,7 +126,7 @@ export function GalleryTab({
           {featured && (
             <button
               type="button"
-              onClick={() => setSelectedItem(featured)}
+              onClick={() => setSelectedIndex(0)}
               className="group grid w-full overflow-hidden rounded-3xl border border-border bg-card text-left shadow-sm transition-transform hover:-translate-y-0.5 lg:grid-cols-[1.15fr,0.85fr]"
             >
               <div className="relative min-h-[280px] overflow-hidden bg-black">
@@ -143,6 +144,10 @@ export function GalleryTab({
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
                 <div className="absolute left-4 top-4 inline-flex rounded-full bg-black/55 px-3 py-1 text-xs font-medium text-white backdrop-blur">
                   {featuredIsYoutube ? 'Featured YouTube' : featured.media_type === 'video' ? 'Featured Video' : 'Featured Photo'}
+                </div>
+                <div className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-black/55 px-3 py-1 text-xs font-medium text-white backdrop-blur">
+                  {featured.visibility === 'private' ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                  {GALLERY_VISIBILITY_LABELS[featured.visibility]}
                 </div>
               </div>
 
@@ -185,7 +190,7 @@ export function GalleryTab({
 
           {restItems.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {restItems.map((item) => {
+              {restItems.map((item, index) => {
                 const isOwner = item.user_id === currentUserId
                 const isYoutube = item.source_type === 'youtube'
                 return (
@@ -195,7 +200,7 @@ export function GalleryTab({
                   >
                     <button
                       type="button"
-                      onClick={() => setSelectedItem(item)}
+                      onClick={() => setSelectedIndex(index + 1)}
                       className="block w-full text-left"
                     >
                       <div className="relative aspect-[4/5] overflow-hidden bg-black">
@@ -213,6 +218,10 @@ export function GalleryTab({
                         <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
                         <div className="absolute left-3 top-3 inline-flex rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur">
                           {isYoutube ? 'YouTube' : item.media_type === 'video' ? '동영상' : '사진'}
+                        </div>
+                        <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur">
+                          {item.visibility === 'private' ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                          {GALLERY_VISIBILITY_LABELS[item.visibility]}
                         </div>
                         <div className="absolute bottom-0 left-0 right-0 p-4">
                           <h4 className="line-clamp-2 text-base font-semibold text-white">
@@ -265,20 +274,24 @@ export function GalleryTab({
         <GalleryUploadDialog onSubmit={onUpload} onClose={() => setShowUpload(false)} />
       )}
 
-      {selectedItem && (
+      {selectedIndex != null && items[selectedIndex] && (
         <GalleryViewerDialog
-          item={selectedItem}
+          item={items[selectedIndex]}
+          canGoPrev={selectedIndex > 0}
+          canGoNext={selectedIndex < items.length - 1}
+          onPrev={() => setSelectedIndex((prev) => (prev != null && prev > 0 ? prev - 1 : prev))}
+          onNext={() => setSelectedIndex((prev) => (prev != null && prev < items.length - 1 ? prev + 1 : prev))}
           currentUserId={currentUserId}
-          canDelete={selectedItem.user_id === currentUserId}
+          canDelete={items[selectedIndex].user_id === currentUserId}
           onDelete={async (item) => {
             await onDelete(item)
-            setSelectedItem(null)
+            setSelectedIndex(null)
           }}
           onFetchComments={onFetchComments}
           onAddComment={onAddComment}
           onDeleteComment={onDeleteComment}
           onView={onView}
-          onClose={() => setSelectedItem(null)}
+          onClose={() => setSelectedIndex(null)}
         />
       )}
     </div>

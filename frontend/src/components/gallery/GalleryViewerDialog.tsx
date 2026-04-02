@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react'
-import { CalendarDays, Eye, MessageCircle, Send, Trash2, User, Video, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { CalendarDays, ChevronLeft, ChevronRight, Eye, Lock, MessageCircle, Send, Trash2, Unlock, User, Video, X } from 'lucide-react'
 import type { GalleryComment, GalleryItem } from '@/types'
+import { GALLERY_VISIBILITY_LABELS } from '@/types'
 
 interface Props {
   item: GalleryItem
+  canGoPrev: boolean
+  canGoNext: boolean
+  onPrev: () => void
+  onNext: () => void
   currentUserId: string
   canDelete: boolean
   onDelete: (item: GalleryItem) => Promise<void>
@@ -27,6 +32,10 @@ function formatDate(dateStr: string) {
 
 export function GalleryViewerDialog({
   item,
+  canGoPrev,
+  canGoNext,
+  onPrev,
+  onNext,
   currentUserId,
   canDelete,
   onDelete,
@@ -37,6 +46,7 @@ export function GalleryViewerDialog({
   onClose,
 }: Props) {
   const isYoutube = item.source_type === 'youtube' && item.embed_url
+  const touchStartY = useRef<number | null>(null)
   const [comments, setComments] = useState<GalleryComment[]>([])
   const [commentText, setCommentText] = useState('')
   const [loadingComments, setLoadingComments] = useState(true)
@@ -67,6 +77,20 @@ export function GalleryViewerDialog({
       .catch(() => undefined)
   }, [item.id, onView, viewTracked])
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.key === 'ArrowLeft' || event.key === 'ArrowUp') && canGoPrev) {
+        onPrev()
+      }
+      if ((event.key === 'ArrowRight' || event.key === 'ArrowDown') && canGoNext) {
+        onNext()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [canGoNext, canGoPrev, onNext, onPrev])
+
   const handleAddComment = async () => {
     const trimmed = commentText.trim()
     if (!trimmed) return
@@ -95,6 +119,22 @@ export function GalleryViewerDialog({
     }
   }
 
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    touchStartY.current = event.changedTouches[0]?.clientY ?? null
+  }
+
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartY.current == null) return
+
+    const endY = event.changedTouches[0]?.clientY ?? touchStartY.current
+    const deltaY = touchStartY.current - endY
+    touchStartY.current = null
+
+    if (Math.abs(deltaY) < 56) return
+    if (deltaY > 0 && canGoNext) onNext()
+    if (deltaY < 0 && canGoPrev) onPrev()
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" onClick={onClose}>
       <div className="mx-auto flex min-h-screen w-full max-w-7xl items-center justify-center px-4 py-6">
@@ -102,13 +142,33 @@ export function GalleryViewerDialog({
           className="grid w-full overflow-hidden rounded-3xl border border-white/10 bg-card shadow-2xl lg:grid-cols-[1.35fr,0.65fr]"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="relative flex min-h-[320px] items-center justify-center bg-black/70 p-4">
+          <div
+            className="relative flex min-h-[320px] items-center justify-center bg-black/70 p-4"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
             <button
               onClick={onClose}
               className="absolute right-4 top-4 z-10 rounded-full bg-black/50 p-2 text-white/80 hover:bg-black/70 hover:text-white"
             >
               <X className="h-5 w-5" />
             </button>
+            <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
+              <button
+                onClick={onPrev}
+                disabled={!canGoPrev}
+                className="rounded-full bg-black/50 p-2 text-white/80 transition hover:bg-black/70 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                onClick={onNext}
+                disabled={!canGoNext}
+                className="rounded-full bg-black/50 p-2 text-white/80 transition hover:bg-black/70 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
             {isYoutube ? (
               <div className="aspect-[9/16] w-full max-w-md overflow-hidden rounded-2xl">
                 <iframe
@@ -141,6 +201,10 @@ export function GalleryViewerDialog({
                 <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
                   {item.media_type === 'video' ? <Video className="h-3.5 w-3.5" /> : null}
                   {isYoutube ? 'YouTube' : item.media_type === 'video' ? '동영상' : '사진'}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground">
+                  {item.visibility === 'private' ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                  {GALLERY_VISIBILITY_LABELS[item.visibility]}
                 </span>
               </div>
 

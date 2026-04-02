@@ -1,18 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ImagePlus, Link2, UploadCloud, Video, X } from 'lucide-react'
 import { parseYouTubeLink } from '@/utils/youtube'
+import { GALLERY_VISIBILITIES, GALLERY_VISIBILITY_LABELS } from '@/types'
 
 interface Props {
   onSubmit: (data:
-    | {
+      | {
         file: File
         title: string | null
         description: string | null
+        visibility: 'public' | 'private'
       }
     | {
         youtubeUrl: string
         title: string | null
         description: string | null
+        visibility: 'public' | 'private'
       }
   ) => Promise<void>
   onClose: () => void
@@ -29,6 +32,7 @@ export function GalleryUploadDialog({ onSubmit, onClose }: Props) {
   const [youtubeUrl, setYoutubeUrl] = useState('')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -74,6 +78,7 @@ export function GalleryUploadDialog({ onSubmit, onClose }: Props) {
           file,
           title: title.trim() || null,
           description: description.trim() || null,
+          visibility,
         })
         onClose()
       } catch (err) {
@@ -97,6 +102,7 @@ export function GalleryUploadDialog({ onSubmit, onClose }: Props) {
         youtubeUrl: youtubeUrl.trim(),
         title: title.trim() || null,
         description: description.trim() || null,
+        visibility,
       })
       onClose()
     } catch (err) {
@@ -270,6 +276,27 @@ export function GalleryUploadDialog({ onSubmit, onClose }: Props) {
                 className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">공개 설정</label>
+            <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted p-1">
+              {GALLERY_VISIBILITIES.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setVisibility(option)}
+                  className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                    visibility === option ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+                  }`}
+                >
+                  {GALLERY_VISIBILITY_LABELS[option]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              공개는 로그인한 누구나 볼 수 있고, 비공개는 업로더 본인만 볼 수 있습니다.
+            </p>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

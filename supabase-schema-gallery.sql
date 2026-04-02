@@ -7,7 +7,7 @@ INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 VALUES (
   'gallery-media',
   'gallery-media',
-  true,
+  false,
   104857600,
   ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/quicktime', 'video/webm']
 )
@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS public.gallery_items (
   title         text,
   description   text,
   media_type    text NOT NULL CHECK (media_type IN ('image', 'video')),
+  visibility    text NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'private')),
   source_type   text NOT NULL DEFAULT 'upload' CHECK (source_type IN ('upload', 'youtube')),
   bucket_name   text NOT NULL DEFAULT 'gallery-media',
   file_path     text NOT NULL UNIQUE,
@@ -34,6 +35,9 @@ CREATE TABLE IF NOT EXISTS public.gallery_items (
   view_count    integer NOT NULL DEFAULT 0,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.gallery_items
+  ADD COLUMN IF NOT EXISTS visibility text NOT NULL DEFAULT 'public';
 
 ALTER TABLE public.gallery_items
   ADD COLUMN IF NOT EXISTS source_type text NOT NULL DEFAULT 'upload';
@@ -51,6 +55,12 @@ ALTER TABLE public.gallery_items
   ADD COLUMN IF NOT EXISTS view_count integer NOT NULL DEFAULT 0;
 
 ALTER TABLE public.gallery_items
+  DROP CONSTRAINT IF EXISTS gallery_items_visibility_check;
+
+ALTER TABLE public.gallery_items
+  ADD CONSTRAINT gallery_items_visibility_check CHECK (visibility IN ('public', 'private'));
+
+ALTER TABLE public.gallery_items
   DROP CONSTRAINT IF EXISTS gallery_items_source_type_check;
 
 ALTER TABLE public.gallery_items
@@ -58,6 +68,7 @@ ALTER TABLE public.gallery_items
 
 CREATE INDEX IF NOT EXISTS idx_gallery_items_created_at ON public.gallery_items(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gallery_items_user_id ON public.gallery_items(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gallery_items_visibility_created_at ON public.gallery_items(visibility, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS public.gallery_comments (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -79,16 +90,67 @@ ALTER TABLE public.gallery_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gallery_comments ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Authenticated users can view gallery items" ON public.gallery_items;
+DROP POLICY IF EXISTS "Users can view own or public gallery items" ON public.gallery_items;
 DROP POLICY IF EXISTS "Users can insert own gallery items" ON public.gallery_items;
 DROP POLICY IF EXISTS "Users can update own gallery items" ON public.gallery_items;
 DROP POLICY IF EXISTS "Users can delete own gallery items" ON public.gallery_items;
 DROP POLICY IF EXISTS "Authenticated users can view gallery comments" ON public.gallery_comments;
+DROP POLICY IF EXISTS "Users can view accessible gallery comments" ON public.gallery_comments;
 DROP POLICY IF EXISTS "Users can insert own gallery comments" ON public.gallery_comments;
 DROP POLICY IF EXISTS "Users can update own gallery comments" ON public.gallery_comments;
 DROP POLICY IF EXISTS "Users can delete own gallery comments" ON public.gallery_comments;
 
-CREATE POLICY "Authenticated users can view gallery items" ON public.gallery_items
-  FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE OR REPLACE FUNCTION public.gallery_item_owner_id(target_item_id uuid)
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT user_id
+  FROM public.gallery_items
+  WHERE id = target_item_id
+$$;
+
+CREATE OR REPLACE FUNCTION public.gallery_item_is_accessible(target_item_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(
+    (
+      SELECT auth.uid() = user_id OR (auth.uid() IS NOT NULL AND visibility = 'public')
+      FROM public.gallery_items
+      WHERE id = target_item_id
+    ),
+    false
+  )
+$$;
+
+CREATE OR REPLACE FUNCTION public.gallery_item_file_is_accessible(target_file_path text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(
+    (
+      SELECT auth.uid() = user_id OR (auth.uid() IS NOT NULL AND visibility = 'public')
+      FROM public.gallery_items
+      WHERE file_path = target_file_path
+    ),
+    false
+  )
+$$;
+
+CREATE POLICY "Users can view own or public gallery items" ON public.gallery_items
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    (auth.uid() IS NOT NULL AND visibility = 'public')
+  );
 
 CREATE POLICY "Users can insert own gallery items" ON public.gallery_items
   FOR INSERT WITH CHECK (auth.uid() = user_id);
@@ -100,11 +162,14 @@ CREATE POLICY "Users can update own gallery items" ON public.gallery_items
 CREATE POLICY "Users can delete own gallery items" ON public.gallery_items
   FOR DELETE USING (auth.uid() = user_id);
 
-CREATE POLICY "Authenticated users can view gallery comments" ON public.gallery_comments
-  FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Users can view accessible gallery comments" ON public.gallery_comments
+  FOR SELECT USING (public.gallery_item_is_accessible(gallery_item_id));
 
 CREATE POLICY "Users can insert own gallery comments" ON public.gallery_comments
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id
+    AND public.gallery_item_is_accessible(gallery_item_id)
+  );
 
 CREATE POLICY "Users can update own gallery comments" ON public.gallery_comments
   FOR UPDATE USING (auth.uid() = user_id)
@@ -126,7 +191,8 @@ BEGIN
 
   UPDATE public.gallery_items
   SET view_count = COALESCE(view_count, 0) + 1
-  WHERE id = target_item_id;
+  WHERE id = target_item_id
+    AND public.gallery_item_is_accessible(target_item_id);
 END;
 $$;
 
@@ -140,7 +206,8 @@ DROP POLICY IF EXISTS "Users can delete own gallery media" ON storage.objects;
 
 CREATE POLICY "Authenticated users can view gallery media" ON storage.objects
   FOR SELECT USING (
-    bucket_id = 'gallery-media' AND auth.uid() IS NOT NULL
+    bucket_id = 'gallery-media'
+    AND public.gallery_item_file_is_accessible(name)
   );
 
 CREATE POLICY "Users can upload own gallery media" ON storage.objects

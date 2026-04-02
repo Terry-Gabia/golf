@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { GalleryComment, GalleryItem, GalleryMediaType } from '@/types'
+import type { GalleryComment, GalleryItem, GalleryMediaType, GalleryVisibility } from '@/types'
 import { parseYouTubeLink } from '@/utils/youtube'
 
 const GALLERY_BUCKET = 'gallery-media'
@@ -9,12 +9,14 @@ type UploadFilePayload = {
   file: File
   title?: string | null
   description?: string | null
+  visibility: GalleryVisibility
 }
 
 type UploadYoutubePayload = {
   youtubeUrl: string
   title?: string | null
   description?: string | null
+  visibility: GalleryVisibility
 }
 
 type UploadPayload = UploadFilePayload | UploadYoutubePayload
@@ -45,6 +47,19 @@ function getUploaderName(email?: string | null) {
 
 function isYoutubePayload(payload: UploadPayload): payload is UploadYoutubePayload {
   return 'youtubeUrl' in payload
+}
+
+async function resolveGalleryMediaUrl(item: GalleryItem) {
+  if ((item.source_type ?? 'upload') !== 'upload' || item.bucket_name !== GALLERY_BUCKET) {
+    return item.public_url
+  }
+
+  const { data, error } = await supabase.storage
+    .from(GALLERY_BUCKET)
+    .createSignedUrl(item.file_path, 60 * 60)
+
+  if (error) throw error
+  return data.signedUrl
 }
 
 export function useGallery(userId: string | null, userEmail: string | null) {
@@ -78,10 +93,14 @@ export function useGallery(userId: string | null, userEmail: string | null) {
 
       if (error) throw error
 
-      setItems((data ?? []).map((item) => ({
+      const resolvedItems = await Promise.all((data ?? []).map(async (item) => ({
         ...item,
+        public_url: await resolveGalleryMediaUrl(item as GalleryItem),
+        visibility: (item.visibility ?? 'public') as GalleryVisibility,
         comment_count: commentCountMap.get(item.id) ?? 0,
       })))
+
+      setItems(resolvedItems)
     } finally {
       setLoading(false)
     }
@@ -127,6 +146,7 @@ export function useGallery(userId: string | null, userEmail: string | null) {
           title: payload.title?.trim() || 'YouTube 영상',
           description: payload.description?.trim() || null,
           media_type: 'video' as const,
+          visibility: payload.visibility,
           source_type: 'youtube' as const,
           bucket_name: 'external',
           file_path: `youtube:${parsed.videoId}`,
@@ -158,20 +178,17 @@ export function useGallery(userId: string | null, userEmail: string | null) {
 
       if (uploadError) throw uploadError
 
-      const { data: publicUrlData } = supabase.storage
-        .from(GALLERY_BUCKET)
-        .getPublicUrl(filePath)
-
       const insertPayload = {
         user_id: userId,
         uploader_name: getUploaderName(userEmail),
         title: title?.trim() || getDefaultTitle(file),
         description: description?.trim() || null,
         media_type: mediaType,
+        visibility: payload.visibility,
         source_type: 'upload' as const,
         bucket_name: GALLERY_BUCKET,
         file_path: filePath,
-        public_url: publicUrlData.publicUrl,
+        public_url: `storage://${GALLERY_BUCKET}/${filePath}`,
       }
 
       const { error: insertError } = await supabase.from('gallery_items').insert(insertPayload)

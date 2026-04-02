@@ -3,6 +3,7 @@ export type Theme = 'light' | 'dark'
 export type RoundVisibility = 'public' | 'private'
 export type GalleryMediaType = 'image' | 'video'
 export type GallerySourceType = 'upload' | 'youtube'
+export type GalleryVisibility = 'public' | 'private'
 
 export interface GolfRecord {
   id: string
@@ -80,6 +81,7 @@ export interface GalleryItem {
   title: string | null
   description: string | null
   media_type: GalleryMediaType
+  visibility: GalleryVisibility
   source_type?: GallerySourceType | null
   bucket_name: string
   file_path: string
@@ -99,6 +101,12 @@ export interface GalleryComment {
   commenter_name: string
   content: string
   created_at: string
+}
+
+export const GALLERY_VISIBILITIES: GalleryVisibility[] = ['public', 'private']
+export const GALLERY_VISIBILITY_LABELS: Record<GalleryVisibility, string> = {
+  public: '공개',
+  private: '비공개',
 }
 
 export const PLAY_TYPES: PlayType[] = ['필드', '파3', '스크린']
