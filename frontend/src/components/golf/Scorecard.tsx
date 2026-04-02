@@ -226,7 +226,7 @@ export function Scorecard({ round, currentUserId, onEdit, onDelete }: Props) {
                         : nameTone
                     }`}>
                       <div className="flex items-center gap-2">
-                        <span className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        <span className={`inline-flex min-w-[3.75rem] shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none ${
                           player.rank <= 3
                             ? 'bg-white/70 text-foreground ring-1 ring-black/5 dark:bg-white/10 dark:ring-white/10'
                             : 'bg-black/8 text-muted-foreground ring-1 ring-black/5 dark:bg-white/6 dark:ring-white/8'
