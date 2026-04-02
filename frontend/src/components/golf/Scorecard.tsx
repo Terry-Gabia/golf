@@ -178,7 +178,7 @@ export function Scorecard({ round, currentUserId, onEdit, onDelete }: Props) {
         <table className="w-full text-sm">
           <thead>
             <tr className={`border-b ${isPublic ? 'border-white/8 bg-black/10 dark:bg-white/[0.03]' : 'border-border bg-muted/30'}`}>
-              <th className={`sticky left-0 z-10 px-3 py-2 text-left font-medium min-w-[80px] ${
+              <th className={`sticky left-0 z-10 min-w-[180px] px-3 py-2 text-left font-medium ${
                 isPublic ? 'bg-black/20 backdrop-blur dark:bg-white/[0.05]' : 'bg-muted/80'
               }`}>홀</th>
               {pars.map((_, i) => (
@@ -220,13 +220,13 @@ export function Scorecard({ round, currentUserId, onEdit, onDelete }: Props) {
                 const nameTone = isPublic ? publicRowStyle.name : rowColor
                 return (
                   <tr key={player.id} className={`border-b border-border/40 ${rowTone}`}>
-                    <td className={`sticky left-0 z-10 px-3 py-2 font-semibold shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)] ${
+                    <td className={`sticky left-0 z-10 min-w-[180px] px-3 py-2 font-semibold shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)] ${
                       isPublic
                         ? `${nameTone} backdrop-blur`
                         : nameTone
                     }`}>
                       <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        <span className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                           player.rank <= 3
                             ? 'bg-white/70 text-foreground ring-1 ring-black/5 dark:bg-white/10 dark:ring-white/10'
                             : 'bg-black/8 text-muted-foreground ring-1 ring-black/5 dark:bg-white/6 dark:ring-white/8'
