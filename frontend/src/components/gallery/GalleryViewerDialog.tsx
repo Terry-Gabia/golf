@@ -46,7 +46,7 @@ export function GalleryViewerDialog({
   onClose,
 }: Props) {
   const isYoutube = item.source_type === 'youtube' && item.embed_url
-  const touchStartY = useRef<number | null>(null)
+  const touchStart = useRef<{ x: number; y: number; time: number } | null>(null)
   const [comments, setComments] = useState<GalleryComment[]>([])
   const [commentText, setCommentText] = useState('')
   const [loadingComments, setLoadingComments] = useState(true)
@@ -120,19 +120,35 @@ export function GalleryViewerDialog({
   }
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    touchStartY.current = event.changedTouches[0]?.clientY ?? null
+    const touch = event.changedTouches[0]
+    if (!touch) return
+
+    touchStart.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now(),
+    }
   }
 
   const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
-    if (touchStartY.current == null) return
+    if (!touchStart.current) return
 
-    const endY = event.changedTouches[0]?.clientY ?? touchStartY.current
-    const deltaY = touchStartY.current - endY
-    touchStartY.current = null
+    const touch = event.changedTouches[0]
+    const start = touchStart.current
+    touchStart.current = null
+    if (!touch) return
 
-    if (Math.abs(deltaY) < 56) return
-    if (deltaY > 0 && canGoNext) onNext()
-    if (deltaY < 0 && canGoPrev) onPrev()
+    const deltaX = touch.clientX - start.x
+    const deltaY = touch.clientY - start.y
+    const absX = Math.abs(deltaX)
+    const absY = Math.abs(deltaY)
+    const elapsed = Date.now() - start.time
+
+    // 세로 스와이프만 내비게이션으로 인정하고, 대각선/짧은 터치는 무시한다.
+    if (elapsed > 900 || absY < 72 || absY < absX * 1.2) return
+
+    if (deltaY < 0 && canGoNext) onNext()
+    if (deltaY > 0 && canGoPrev) onPrev()
   }
 
   return (
@@ -141,11 +157,11 @@ export function GalleryViewerDialog({
         <div
           className="grid w-full overflow-hidden rounded-3xl border border-white/10 bg-card shadow-2xl lg:grid-cols-[1.35fr,0.65fr]"
           onClick={(e) => e.stopPropagation()}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
         >
           <div
             className="relative flex min-h-[320px] items-center justify-center bg-black/70 p-4"
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
           >
             <button
               onClick={onClose}
@@ -167,6 +183,22 @@ export function GalleryViewerDialog({
                 className="rounded-full bg-black/50 p-2 text-white/80 transition hover:bg-black/70 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
               >
                 <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="absolute inset-x-4 bottom-4 z-10 flex gap-2 sm:hidden">
+              <button
+                onClick={onPrev}
+                disabled={!canGoPrev}
+                className="flex-1 rounded-2xl bg-black/55 px-4 py-3 text-sm font-medium text-white/90 backdrop-blur transition hover:bg-black/70 disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                이전
+              </button>
+              <button
+                onClick={onNext}
+                disabled={!canGoNext}
+                className="flex-1 rounded-2xl bg-black/55 px-4 py-3 text-sm font-medium text-white/90 backdrop-blur transition hover:bg-black/70 disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                다음
               </button>
             </div>
             {isYoutube ? (
