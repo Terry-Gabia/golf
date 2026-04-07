@@ -1,32 +1,35 @@
-import { useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
-import { useGolfRounds } from '@/hooks/useGolfRounds'
-import { useNotices } from '@/hooks/useNotices'
-import { useGallery } from '@/hooks/useGallery'
 import { Header } from '@/components/layout/Header'
 import { AuthForm } from '@/components/auth/AuthForm'
-import { ScorecardList } from '@/components/golf/ScorecardList'
-import { NoticeList } from '@/components/notice/NoticeList'
-import { WeatherTab } from '@/components/weather/WeatherTab'
-import { GalleryTab } from '@/components/gallery/GalleryTab'
+
+const ScorecardsTab = lazy(() => import('@/components/tabs/ScorecardsTab'))
+const NoticesTab = lazy(() => import('@/components/tabs/NoticesTab'))
+const WeatherTab = lazy(() => import('@/components/tabs/WeatherTab'))
+const GalleryTab = lazy(() => import('@/components/tabs/GalleryTab'))
+
+type TabKey = 'scorecards' | 'notices' | 'weather' | 'gallery'
 
 export default function App() {
   const { user, loading: authLoading, signUp, signIn, signInWithGoogle, signOut } = useAuth()
   const { theme, toggleTheme } = useTheme(user?.id ?? null)
-  const { rounds, loading: roundsLoading, addRound, updateRound, deleteRound } = useGolfRounds(user?.id ?? null)
-  const { notices, loading: noticesLoading, addNotice, updateNotice, deleteNotice, joinNotice, leaveNotice } = useNotices(user?.id ?? null)
-  const {
-    items: galleryItems,
-    loading: galleryLoading,
-    uploadItem,
-    deleteItem,
-    fetchComments,
-    addComment,
-    deleteComment,
-    incrementView,
-  } = useGallery(user?.id ?? null, user?.email ?? null)
-  const [activeTab, setActiveTab] = useState('scorecards')
+  const [activeTab, setActiveTab] = useState<TabKey>('scorecards')
+  const [loadedTabs, setLoadedTabs] = useState<Set<TabKey>>(() => new Set(['scorecards']))
+
+  useEffect(() => {
+    setLoadedTabs((current) => {
+      if (current.has(activeTab)) return current
+
+      const next = new Set(current)
+      next.add(activeTab)
+      return next
+    })
+  }, [activeTab])
+
+  const loadingFallback = (
+    <div className="py-20 text-center text-muted-foreground">불러오는 중...</div>
+  )
 
   if (authLoading) {
     return (
@@ -57,44 +60,36 @@ export default function App() {
         onToggleTheme={toggleTheme}
         onSignOut={signOut}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={(tab) => setActiveTab(tab as TabKey)}
       />
       <main className="mx-auto max-w-4xl px-4 py-6">
-        {activeTab === 'scorecards' && (
-          <ScorecardList
-            currentUserId={user.id}
-            rounds={rounds}
-            loading={roundsLoading}
-            onAdd={addRound}
-            onUpdate={updateRound}
-            onDelete={deleteRound}
-          />
+        {loadedTabs.has('scorecards') && (
+          <section className={activeTab === 'scorecards' ? 'block' : 'hidden'}>
+            <Suspense fallback={loadingFallback}>
+              <ScorecardsTab currentUserId={user.id} />
+            </Suspense>
+          </section>
         )}
-        {activeTab === 'notices' && (
-          <NoticeList
-            notices={notices}
-            loading={noticesLoading}
-            currentUserId={user.id}
-            onAdd={addNotice}
-            onUpdate={updateNotice}
-            onDelete={deleteNotice}
-            onJoin={joinNotice}
-            onLeave={leaveNotice}
-          />
+        {loadedTabs.has('notices') && (
+          <section className={activeTab === 'notices' ? 'block' : 'hidden'}>
+            <Suspense fallback={loadingFallback}>
+              <NoticesTab currentUserId={user.id} />
+            </Suspense>
+          </section>
         )}
-        {activeTab === 'weather' && <WeatherTab />}
-        {activeTab === 'gallery' && (
-          <GalleryTab
-            items={galleryItems}
-            loading={galleryLoading}
-            currentUserId={user.id}
-            onUpload={uploadItem}
-            onDelete={deleteItem}
-            onFetchComments={fetchComments}
-            onAddComment={addComment}
-            onDeleteComment={deleteComment}
-            onView={incrementView}
-          />
+        {loadedTabs.has('weather') && (
+          <section className={activeTab === 'weather' ? 'block' : 'hidden'}>
+            <Suspense fallback={loadingFallback}>
+              <WeatherTab />
+            </Suspense>
+          </section>
+        )}
+        {loadedTabs.has('gallery') && (
+          <section className={activeTab === 'gallery' ? 'block' : 'hidden'}>
+            <Suspense fallback={loadingFallback}>
+              <GalleryTab currentUserId={user.id} userEmail={user.email ?? null} />
+            </Suspense>
+          </section>
         )}
       </main>
     </div>

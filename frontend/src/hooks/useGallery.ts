@@ -62,6 +62,26 @@ async function resolveGalleryMediaUrl(item: GalleryItem) {
   return data.signedUrl
 }
 
+async function resolveGalleryMediaUrls(items: GalleryItem[]) {
+  const uploadItems = items.filter(
+    (item) => (item.source_type ?? 'upload') === 'upload' && item.bucket_name === GALLERY_BUCKET
+  )
+
+  if (uploadItems.length === 0) {
+    return new Map<string, string>()
+  }
+
+  const { data, error } = await supabase.storage
+    .from(GALLERY_BUCKET)
+    .createSignedUrls(uploadItems.map((item) => item.file_path), 60 * 60)
+
+  if (error) throw error
+
+  return new Map(
+    uploadItems.map((item, index) => [item.id, data[index]?.signedUrl ?? item.public_url])
+  )
+}
+
 export function useGallery(userId: string | null, userEmail: string | null) {
   const [items, setItems] = useState<GalleryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -93,14 +113,24 @@ export function useGallery(userId: string | null, userEmail: string | null) {
 
       if (error) throw error
 
-      const resolvedItems = await Promise.all((data ?? []).map(async (item) => ({
+      const galleryItems = (data ?? []) as GalleryItem[]
+      const signedUrlMap = await resolveGalleryMediaUrls(galleryItems)
+
+      const resolvedItems = galleryItems.map((item) => ({
         ...item,
-        public_url: await resolveGalleryMediaUrl(item as GalleryItem),
+        public_url: signedUrlMap.get(item.id) ?? resolveGalleryMediaUrl(item),
         visibility: (item.visibility ?? 'public') as GalleryVisibility,
         comment_count: commentCountMap.get(item.id) ?? 0,
-      })))
+      }))
 
-      setItems(resolvedItems)
+      const normalizedItems = await Promise.all(
+        resolvedItems.map(async (item) => ({
+          ...item,
+          public_url: typeof item.public_url === 'string' ? item.public_url : await item.public_url,
+        }))
+      )
+
+      setItems(normalizedItems)
     } finally {
       setLoading(false)
     }
