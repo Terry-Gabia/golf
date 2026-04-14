@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #000000;
+  --color-foreground: #ffffff;
+  --color-primary: #22c55e;
+  --color-primary-foreground: #000000;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-muted: #1a1a1a;
+  --color-muted-foreground: #888888;
+  --color-border: #333333;
+  --color-card: #111111;
+  --color-card-foreground: #ffffff;
+}
+
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #000000;
+  color: #ffffff;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  font-family: 'Pretendard Variable', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+/* 워치 안전 영역 (원형 디스플레이 내접 사각형) */
+.watch-safe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 75%;
+  height: 75%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 큰 터치 버튼 */
+.watch-btn {
+  min-width: 56px;
+  min-height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: bold;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.1s;
+}
+
+.watch-btn:active {
+  transform: scale(0.9);
+  opacity: 0.8;
+}
+
+/* 스크롤바 숨기기 */
+::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  scrollbar-width: none;
+}
