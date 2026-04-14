@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 골프공 -->
+    <path
+        android:fillColor="#22c55e"
+        android:pathData="M54,42 A10,10 0 1,1 54,62 A10,10 0 1,1 54,42Z"/>
+    <!-- 골프 티 -->
+    <path
+        android:strokeColor="#22c55e"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M54,62 L54,78"/>
+    <path
+        android:strokeColor="#22c55e"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M46,82 L62,82"/>
+    <!-- +1 텍스트 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,36 L48,36 L48,28 L52,28 L52,36 L56,36 L56,39 L52,39 L52,47 L48,47 L48,39 L44,39Z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M60,32 L63,28 L66,28 L66,47 L63,47 L63,32Z"/>
+</vector>

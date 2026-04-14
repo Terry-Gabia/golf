@@ -9,7 +9,7 @@ import type { Screen, LocalWatchRound } from '@/types'
 
 export default function App() {
   const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth()
-  const { round, recentCourses, startRound, updateStroke, goToHole, completeRound } = useWatchRound(user?.id ?? null)
+  const { round, recentCourses, startRound, updateStroke, goToHole, completeRound, discardRound } = useWatchRound(user?.id ?? null)
 
   const [screen, setScreen] = useState<Screen>(() => {
     if (!user) return 'auth'
@@ -53,6 +53,13 @@ export default function App() {
     setScreen('start')
   }, [])
 
+  const handleDiscard = useCallback(() => {
+    if (confirm('라운드를 취소하시겠습니까?')) {
+      discardRound()
+      setScreen('start')
+    }
+  }, [discardRound])
+
   return (
     <div className="w-full h-full bg-background relative">
       {/* 로그아웃 버튼 (좌상단, 인증 후에만) */}
@@ -87,6 +94,7 @@ export default function App() {
           onUpdateStroke={updateStroke}
           onGoToHole={goToHole}
           onComplete={handleComplete}
+          onDiscard={handleDiscard}
         />
       )}
 

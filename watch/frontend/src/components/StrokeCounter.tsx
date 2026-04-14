@@ -6,9 +6,10 @@ interface StrokeCounterProps {
   onUpdateStroke: (hole: number, delta: number) => void
   onGoToHole: (hole: number) => void
   onComplete: () => void
+  onDiscard: () => void
 }
 
-export function StrokeCounter({ round, onUpdateStroke, onGoToHole, onComplete }: StrokeCounterProps) {
+export function StrokeCounter({ round, onUpdateStroke, onGoToHole, onComplete, onDiscard }: StrokeCounterProps) {
   const touchStartX = useRef(0)
   const currentHole = round.current_hole
   const currentScore = round.scores[currentHole - 1] || 0
@@ -28,7 +29,8 @@ export function StrokeCounter({ round, onUpdateStroke, onGoToHole, onComplete }:
     }
   }, [currentHole, round.holes, onGoToHole])
 
-  const isLastHole = currentHole === round.holes
+  // 입력된 홀이 하나라도 있으면 완료 가능
+  const hasAnyScore = round.scores.some(s => s > 0)
 
   return (
     <div
@@ -36,9 +38,17 @@ export function StrokeCounter({ round, onUpdateStroke, onGoToHole, onComplete }:
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* 코스명 */}
-      <div className="text-[10px] text-muted-foreground truncate max-w-full">
-        {round.cc_name}
+      {/* 코스명 + 종료 버튼 */}
+      <div className="flex items-center justify-between w-full">
+        <div className="text-[10px] text-muted-foreground truncate">
+          {round.cc_name}
+        </div>
+        <button
+          onClick={onDiscard}
+          className="text-[10px] text-destructive/60 px-1"
+        >
+          취소
+        </button>
       </div>
 
       {/* 홀 번호 */}
@@ -110,7 +120,7 @@ export function StrokeCounter({ round, onUpdateStroke, onGoToHole, onComplete }:
         <span className="text-xs text-muted-foreground">
           합계 {round.total}타
         </span>
-        {isLastHole && currentScore > 0 && (
+        {hasAnyScore && (
           <button
             onClick={onComplete}
             className="px-3 py-1 rounded-full bg-primary text-primary-foreground text-xs font-bold active:scale-95 transition-transform"
