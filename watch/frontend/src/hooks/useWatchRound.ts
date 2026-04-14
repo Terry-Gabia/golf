@@ -67,7 +67,7 @@ export function useWatchRound(userId: string | null) {
     setRound(prev => {
       if (!prev) return prev
       const scores = [...prev.scores]
-      scores[hole - 1] = Math.max(0, (scores[hole - 1] || 0) + delta)
+      scores[hole - 1] = Math.max(1, Math.min(15, (scores[hole - 1] || 0) + delta))
       const total = scores.reduce((a, b) => a + b, 0)
       return { ...prev, scores, total, synced: false, updated_at: new Date().toISOString() }
     })

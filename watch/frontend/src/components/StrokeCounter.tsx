@@ -67,14 +67,15 @@ export function StrokeCounter({ round, onUpdateStroke, onGoToHole, onComplete, o
       <div className="flex items-center gap-6">
         <button
           onClick={() => onUpdateStroke(currentHole, -1)}
-          disabled={currentScore <= 0}
+          disabled={currentScore <= 1}
           className="watch-btn bg-destructive text-destructive-foreground disabled:opacity-30"
         >
           −
         </button>
         <button
           onClick={() => onUpdateStroke(currentHole, 1)}
-          className="watch-btn bg-primary text-primary-foreground"
+          disabled={currentScore >= 15}
+          className="watch-btn bg-primary text-primary-foreground disabled:opacity-30"
         >
           +
         </button>
