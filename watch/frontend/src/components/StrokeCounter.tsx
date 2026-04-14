@@ -29,8 +29,9 @@ export function StrokeCounter({ round, onUpdateStroke, onGoToHole, onComplete, o
     }
   }, [currentHole, round.holes, onGoToHole])
 
-  // 입력된 홀이 하나라도 있으면 완료 가능
-  const hasAnyScore = round.scores.some(s => s > 0)
+  // 모든 홀에 타수가 입력되어야 완료 가능
+  const filledHoles = round.scores.filter(s => s > 0).length
+  const allFilled = filledHoles === round.holes
 
   return (
     <div
@@ -118,16 +119,19 @@ export function StrokeCounter({ round, onUpdateStroke, onGoToHole, onComplete, o
       {/* 총합 + 완료 */}
       <div className="flex items-center gap-3 mt-1">
         <span className="text-xs text-muted-foreground">
-          합계 {round.total}타
+          합계 {round.total}타 ({filledHoles}/{round.holes})
         </span>
-        {hasAnyScore && (
-          <button
-            onClick={onComplete}
-            className="px-3 py-1 rounded-full bg-primary text-primary-foreground text-xs font-bold active:scale-95 transition-transform"
-          >
-            완료
-          </button>
-        )}
+        <button
+          onClick={onComplete}
+          disabled={!allFilled}
+          className={`px-3 py-1 rounded-full text-xs font-bold active:scale-95 transition-all ${
+            allFilled
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted text-muted-foreground opacity-40'
+          }`}
+        >
+          저장
+        </button>
       </div>
     </div>
   )
