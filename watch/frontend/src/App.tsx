@@ -1,109 +1,63 @@
 import { useState, useCallback } from 'react'
-import { useAuth } from '@/hooks/useAuth'
-import { useWatchRound } from '@/hooks/useWatchRound'
-import { AuthScreen } from '@/components/AuthScreen'
-import { StartScreen } from '@/components/StartScreen'
-import { StrokeCounter } from '@/components/StrokeCounter'
-import { RoundSummary } from '@/components/RoundSummary'
-import type { Screen, LocalWatchRound } from '@/types'
 
 export default function App() {
-  const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth()
-  const { round, recentCourses, startRound, updateStroke, goToHole, completeRound, discardRound } = useWatchRound(user?.id ?? null)
+  const [count, setCount] = useState(0)
 
-  const [screen, setScreen] = useState<Screen>(() => {
-    if (!user) return 'auth'
-    if (round?.status === 'in_progress') return 'counter'
-    return 'start'
-  })
-
-  const [completedRound, setCompletedRound] = useState<LocalWatchRound | null>(null)
-
-  // 인증 상태 변경 감지
-  if (!authLoading && !user && screen !== 'auth') {
-    setScreen('auth')
-  }
-  if (!authLoading && user && screen === 'auth') {
-    setScreen(round?.status === 'in_progress' ? 'counter' : 'start')
-  }
-
-  const handleGoogleLogin = useCallback(async () => {
-    try {
-      await signInWithGoogle()
-    } catch (err) {
-      console.error('로그인 실패:', err)
-    }
-  }, [signInWithGoogle])
-
-  const handleStart = useCallback((ccName: string, holes: number) => {
-    startRound(ccName, holes)
-    setScreen('counter')
-  }, [startRound])
-
-  const handleComplete = useCallback(async () => {
-    const result = await completeRound()
-    if (result) {
-      setCompletedRound(result)
-      setScreen('summary')
-    }
-  }, [completeRound])
-
-  const handleNewRound = useCallback(() => {
-    setCompletedRound(null)
-    setScreen('start')
+  const increment = useCallback(() => {
+    setCount(c => c + 1)
   }, [])
 
-  const handleDiscard = useCallback(() => {
-    if (confirm('라운드를 취소하시겠습니까?')) {
-      discardRound()
-      setScreen('start')
+  const decrement = useCallback(() => {
+    setCount(c => Math.max(0, c - 1))
+  }, [])
+
+  const reset = useCallback(() => {
+    if (count > 0 && confirm('초기화할까요?')) {
+      setCount(0)
     }
-  }, [discardRound])
+  }, [count])
 
   return (
     <div className="w-full h-full bg-background relative">
-      {/* 로그아웃 버튼 (좌상단, 인증 후에만) */}
-      {user && screen !== 'auth' && (
+      <div className="watch-safe gap-2">
+        {/* 타이틀 */}
+        <div className="text-[11px] text-primary font-bold tracking-wide">
+          타수 카운터
+        </div>
+
+        {/* 카운트 숫자 (메인) */}
         <button
-          onClick={signOut}
-          className="absolute top-1 left-2 text-[9px] text-muted-foreground/50 z-10"
+          onClick={increment}
+          className="text-[80px] font-black leading-none text-foreground my-2 active:scale-95 transition-transform select-none"
         >
-          로그아웃
+          {count}
         </button>
-      )}
 
-      {screen === 'auth' && (
-        <AuthScreen
-          onGoogleLogin={handleGoogleLogin}
-          loading={authLoading}
-        />
-      )}
+        {/* +/- 버튼 */}
+        <div className="flex items-center gap-6">
+          <button
+            onClick={decrement}
+            disabled={count <= 0}
+            className="watch-btn bg-destructive text-destructive-foreground disabled:opacity-30"
+          >
+            −
+          </button>
+          <button
+            onClick={increment}
+            className="watch-btn bg-primary text-primary-foreground"
+          >
+            +
+          </button>
+        </div>
 
-      {screen === 'start' && (
-        <StartScreen
-          recentCourses={recentCourses}
-          onStart={handleStart}
-          onResume={() => setScreen('counter')}
-          hasActiveRound={round?.status === 'in_progress'}
-        />
-      )}
-
-      {screen === 'counter' && round && (
-        <StrokeCounter
-          round={round}
-          onUpdateStroke={updateStroke}
-          onGoToHole={goToHole}
-          onComplete={handleComplete}
-          onDiscard={handleDiscard}
-        />
-      )}
-
-      {screen === 'summary' && completedRound && (
-        <RoundSummary
-          round={completedRound}
-          onNewRound={handleNewRound}
-        />
-      )}
+        {/* 초기화 */}
+        <button
+          onClick={reset}
+          className="mt-2 px-4 py-1.5 rounded-full text-[11px] text-muted-foreground border border-border active:scale-95 transition-transform"
+        >
+          초기화
+        </button>
+      </div>
     </div>
   )
 }
